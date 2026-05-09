@@ -129,7 +129,14 @@ struct DuplicateGroupsView: View {
                 .environment(appState)
         }
         .sheet(item: $previewContext) { ctx in
-            FloatingPhotoPreview(assets: ctx.assets, initialIndex: ctx.initialIndex, category: ctx.category, reason: ctx.reason)
+            FloatingPhotoPreview(assets: ctx.assets, initialIndex: ctx.initialIndex, category: ctx.category, reason: ctx.reason) { deleted in
+                onGroupsChanged?(groups.compactMap { g -> DuplicateGroup? in
+                    let remaining = g.assets.filter { $0.localIdentifier != deleted.localIdentifier }
+                    guard remaining.count > 1 else { return nil }
+                    return DuplicateGroup(assets: remaining, recommended: remaining.contains(where: { $0.localIdentifier == g.recommended.localIdentifier }) ? g.recommended : remaining[0])
+                })
+            }
+            .environment(appState)
         }
         .overlay(alignment: .top) {
             if showToast {

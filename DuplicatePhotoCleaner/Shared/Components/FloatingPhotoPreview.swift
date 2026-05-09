@@ -27,15 +27,19 @@ struct FloatingPhotoPreview: View {
     let initialIndex: Int
     let category: PhotoPreviewCategory
     let reason: String
+    var onDelete: ((PHAsset) -> Void)?
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var currentIndex: Int
     @State private var initialImage: UIImage?
+    @State private var showDeleteConfirmation = false
 
-    init(assets: [PHAsset], initialIndex: Int = 0, category: PhotoPreviewCategory = .others, reason: String = "") {
+    init(assets: [PHAsset], initialIndex: Int = 0, category: PhotoPreviewCategory = .others, reason: String = "", onDelete: ((PHAsset) -> Void)? = nil) {
         self.assets = assets
         self.initialIndex = initialIndex
         self.category = category
         self.reason = reason
+        self.onDelete = onDelete
         _currentIndex = State(initialValue: initialIndex)
     }
 
@@ -93,6 +97,29 @@ struct FloatingPhotoPreview: View {
                                 value: reason,
                                 color: category == .best ? Color.appSuccess : Color.appPurple)
                     }
+
+                    // Delete button
+                    Button {
+                        if appState.deletePreference == .askEveryTime {
+                            showDeleteConfirmation = true
+                        } else {
+                            deleteCurrentPhoto()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash").font(.system(size: 14, weight: .medium))
+                            Text("Delete This Photo").font(.appSmallSemibold)
+                        }
+                        .foregroundStyle(Color.appDanger)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                                .strokeBorder(Color.appDanger.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
                 .padding(.top, 4)
                 .padding(.horizontal, 24)
@@ -103,7 +130,28 @@ struct FloatingPhotoPreview: View {
         .background(Color.appBackground)
         .presentationDetents([.fraction(0.82), .large])
         .presentationDragIndicator(.hidden)
+        .sheet(isPresented: $showDeleteConfirmation) {
+            DeletePreferencePickerView { deleteCurrentPhoto() }
+                .environment(appState)
+        }
         .onAppear { preloadInitial() }
+    }
+
+    private func deleteCurrentPhoto() {
+        guard currentIndex < assets.count else { return }
+        let asset = assets[currentIndex]
+        let bytes = asset.fileSizeBytes
+        Task {
+            try? await PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.deleteAssets([asset] as NSArray)
+            }
+            await MainActor.run {
+                HapticManager.notification(.success)
+                appState.recordCleanup(freedBytes: bytes, deletedCount: 1)
+                onDelete?(asset)
+                dismiss()
+            }
+        }
     }
 
     private func preloadInitial() {
