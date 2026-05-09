@@ -129,7 +129,10 @@ struct DashboardView: View {
                 screenshotGroups = await orchestrator.scanScreenshots(state: state)
             }
 
-            navigateCategory = category
+            // Delay navigation to next run loop so SwiftUI commits the data update first
+            DispatchQueue.main.async {
+                navigateCategory = category
+            }
         }
     }
 
