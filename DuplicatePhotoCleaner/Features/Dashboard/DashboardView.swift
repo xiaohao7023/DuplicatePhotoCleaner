@@ -97,13 +97,25 @@ struct DashboardView: View {
     private func categoryDetailView(for category: ScanCategory) -> some View {
         switch category {
         case .duplicates:
-            DuplicateGroupsView(groups: scanData.duplicateGroups) { scanData.duplicateGroups = $0 }
+            DuplicateGroupsView(groups: scanData.duplicateGroups) {
+                scanData.duplicateGroups = $0
+                dupState.update(fromDuplicateGroups: $0)
+            }
         case .similar:
-            SimilarGroupsView(groups: scanData.similarGroups) { scanData.similarGroups = $0 }
+            SimilarGroupsView(groups: scanData.similarGroups) {
+                scanData.similarGroups = $0
+                simState.update(fromSimilarGroups: $0)
+            }
         case .blurry:
-            BlurryPhotosView(photos: scanData.blurryPhotos) { scanData.blurryPhotos = $0 }
+            BlurryPhotosView(photos: scanData.blurryPhotos) {
+                scanData.blurryPhotos = $0
+                blurState.update(fromBlurryPhotos: $0)
+            }
         case .screenshots:
-            ScreenshotsView(groups: scanData.screenshotGroups) { scanData.screenshotGroups = $0 }
+            ScreenshotsView(groups: scanData.screenshotGroups) {
+                scanData.screenshotGroups = $0
+                ssState.update(fromScreenshotGroups: $0)
+            }
         }
     }
 

@@ -37,6 +37,30 @@ class CategoryScanState {
     func reset() {
         isScanning = false; isDone = false; progress = 0; count = 0; sizeBytes = 0
     }
+
+    func update(fromDuplicateGroups groups: [DuplicateGroup]) {
+        count = groups.reduce(0) { $0 + $1.assets.count - 1 }
+        sizeBytes = groups.reduce(Int64(0)) { total, g in
+            total + g.assets.filter { $0.localIdentifier != g.recommended.localIdentifier }.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
+        }
+    }
+
+    func update(fromSimilarGroups groups: [SimilarGroup]) {
+        count = groups.reduce(0) { $0 + $1.assets.count - 1 }
+        sizeBytes = groups.reduce(Int64(0)) { total, g in
+            total + g.assets.filter { $0.localIdentifier != g.recommended.localIdentifier }.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
+        }
+    }
+
+    func update(fromBlurryPhotos photos: [PhotoQuality]) {
+        count = photos.count
+        sizeBytes = photos.reduce(Int64(0)) { $0 + $1.fileSize }
+    }
+
+    func update(fromScreenshotGroups groups: [ScreenshotGroupData]) {
+        count = groups.reduce(0) { $0 + $1.assets.count }
+        sizeBytes = groups.reduce(Int64(0)) { $0 + $1.totalSize }
+    }
 }
 
 actor ScanOrchestrator {

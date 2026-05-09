@@ -33,6 +33,7 @@ struct FloatingPhotoPreview: View {
     @State private var currentIndex: Int
     @State private var initialImage: UIImage?
     @State private var showDeleteConfirmation = false
+    @State private var showDeletedToast = false
 
     init(assets: [PHAsset], initialIndex: Int = 0, category: PhotoPreviewCategory = .others, reason: String = "", onDelete: ((PHAsset) -> Void)? = nil) {
         self.assets = assets
@@ -135,6 +136,12 @@ struct FloatingPhotoPreview: View {
                 .environment(appState)
         }
         .onAppear { preloadInitial() }
+        .overlay(alignment: .top) {
+            if showDeletedToast {
+                SuccessToast(message: "Photo deleted")
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
     }
 
     private func deleteCurrentPhoto() {
@@ -148,8 +155,11 @@ struct FloatingPhotoPreview: View {
             await MainActor.run {
                 HapticManager.notification(.success)
                 appState.recordCleanup(freedBytes: bytes, deletedCount: 1)
-                onDelete?(asset)
-                dismiss()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showDeletedToast = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    onDelete?(asset)
+                    dismiss()
+                }
             }
         }
     }
