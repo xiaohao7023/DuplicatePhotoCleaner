@@ -46,69 +46,67 @@ actor ScanOrchestrator {
     private let qualityAnalyzer = QualityAnalyzer()
     private let screenshotClassifier = ScreenshotClassifier()
 
-    // Cached results (read from main actor after scan completes)
-    nonisolated(unsafe) var duplicateGroups: [DuplicateGroup] = []
-    nonisolated(unsafe) var similarGroups: [SimilarGroup] = []
-    nonisolated(unsafe) var blurryPhotos: [PhotoQuality] = []
-    nonisolated(unsafe) var screenshotGroups: [ScreenshotGroupData] = []
-
     // MARK: - Individual scans
 
-    func scanDuplicates(state: CategoryScanState, includeVideos: Bool = false) async {
+    func scanDuplicates(state: CategoryScanState, includeVideos: Bool = false) async -> [DuplicateGroup] {
         await MainActor.run { state.isScanning = true; state.isDone = false }
         let allPhotos = await photoLibrary.fetchAllPhotos(includeVideos: includeVideos)
-        duplicateGroups = await duplicateDetector.detect(in: allPhotos) { p in
+        let results = await duplicateDetector.detect(in: allPhotos) { p in
             Task { @MainActor in state.progress = p }
         }
-        let count = duplicateGroups.reduce(0) { $0 + $1.assets.count - 1 }
-        let bytes = duplicateGroups.reduce(Int64(0)) { total, group in
+        let count = results.reduce(0) { $0 + $1.assets.count - 1 }
+        let bytes = results.reduce(Int64(0)) { total, group in
             total + group.assets.filter { $0 != group.recommended }.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
         }
         await MainActor.run {
             state.count = count; state.sizeBytes = bytes
             state.isScanning = false; state.isDone = true; state.progress = 1
         }
+        return results
     }
 
-    func scanSimilar(state: CategoryScanState, includeVideos: Bool = false) async {
+    func scanSimilar(state: CategoryScanState, includeVideos: Bool = false) async -> [SimilarGroup] {
         await MainActor.run { state.isScanning = true; state.isDone = false }
         let allPhotos = await photoLibrary.fetchAllPhotos(includeVideos: includeVideos)
-        similarGroups = await similarityGrouper.group(assets: allPhotos) { p in
+        let results = await similarityGrouper.group(assets: allPhotos) { p in
             Task { @MainActor in state.progress = p }
         }
-        let count = similarGroups.reduce(0) { $0 + $1.assets.count - 1 }
-        let bytes = similarGroups.reduce(Int64(0)) { total, group in
+        let count = results.reduce(0) { $0 + $1.assets.count - 1 }
+        let bytes = results.reduce(Int64(0)) { total, group in
             total + group.assets.filter { $0 != group.recommended }.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
         }
         await MainActor.run {
             state.count = count; state.sizeBytes = bytes
             state.isScanning = false; state.isDone = true; state.progress = 1
         }
+        return results
     }
 
-    func scanBlurry(state: CategoryScanState, includeVideos: Bool = false) async {
+    func scanBlurry(state: CategoryScanState, includeVideos: Bool = false) async -> [PhotoQuality] {
         await MainActor.run { state.isScanning = true; state.isDone = false }
         let allPhotos = await photoLibrary.fetchAllPhotos(includeVideos: includeVideos)
-        blurryPhotos = await qualityAnalyzer.findBlurry(assets: allPhotos) { p in
+        let results = await qualityAnalyzer.findBlurry(assets: allPhotos) { p in
             Task { @MainActor in state.progress = p }
         }
-        let bytes = blurryPhotos.reduce(Int64(0) as Int64) { $0 + $1.fileSize }
+        let bytes = results.reduce(Int64(0) as Int64) { $0 + $1.fileSize }
         await MainActor.run {
-            state.count = blurryPhotos.count; state.sizeBytes = bytes
+            state.count = results.count; state.sizeBytes = bytes
             state.isScanning = false; state.isDone = true; state.progress = 1
         }
+        return results
     }
 
-    func scanScreenshots(state: CategoryScanState) async {
+    func scanScreenshots(state: CategoryScanState) async -> [ScreenshotGroupData] {
         await MainActor.run { state.isScanning = true; state.isDone = false; state.progress = 0.5 }
         let screenshots = await screenshotClassifier.fetchScreenshots()
-        screenshotGroups = await screenshotClassifier.groupByTime(screenshots)
-        let count = screenshotGroups.reduce(0) { $0 + $1.assets.count }
-        let bytes = screenshotGroups.reduce(Int64(0)) { $0 + $1.totalSize }
+        let results = await screenshotClassifier.groupByTime(screenshots)
+        let count = results.reduce(0) { $0 + $1.assets.count }
+        let bytes = results.reduce(Int64(0)) { $0 + $1.totalSize }
         await MainActor.run {
             state.count = count; state.sizeBytes = bytes
             state.isScanning = false; state.isDone = true; state.progress = 1
         }
+        return results
     }
 
     // MARK: - Full scan (legacy)
@@ -118,24 +116,24 @@ actor ScanOrchestrator {
 
         await MainActor.run { progress.phase = .screenshots; progress.overallProgress = 0.1 }
         let screenshots = await screenshotClassifier.fetchScreenshots()
-        screenshotGroups = await screenshotClassifier.groupByTime(screenshots)
+        let ssGroups = await screenshotClassifier.groupByTime(screenshots)
         await MainActor.run { progress.overallProgress = 0.15 }
 
         await MainActor.run { progress.phase = .duplicates; progress.overallProgress = 0.2 }
         let allPhotos = await photoLibrary.fetchAllPhotos(includeVideos: includeVideos)
-        duplicateGroups = await duplicateDetector.detect(in: allPhotos) { p in
+        let dupGroups = await duplicateDetector.detect(in: allPhotos) { p in
             Task { @MainActor in progress.phaseProgress = p; progress.overallProgress = 0.2 + p * 0.3 }
         }
         await MainActor.run { progress.overallProgress = 0.5 }
 
         await MainActor.run { progress.phase = .similar; progress.overallProgress = 0.5 }
-        similarGroups = await similarityGrouper.group(assets: allPhotos) { p in
+        let simGroups = await similarityGrouper.group(assets: allPhotos) { p in
             Task { @MainActor in progress.phaseProgress = p; progress.overallProgress = 0.5 + p * 0.3 }
         }
         await MainActor.run { progress.overallProgress = 0.8 }
 
         await MainActor.run { progress.phase = .blurry; progress.overallProgress = 0.8 }
-        blurryPhotos = await qualityAnalyzer.findBlurry(assets: allPhotos) { p in
+        let blurPhotos = await qualityAnalyzer.findBlurry(assets: allPhotos) { p in
             Task { @MainActor in progress.phaseProgress = p; progress.overallProgress = 0.8 + p * 0.2 }
         }
 
@@ -144,8 +142,8 @@ actor ScanOrchestrator {
         }
 
         return ScanResult(
-            duplicateGroups: duplicateGroups, similarGroups: similarGroups,
-            blurryPhotos: blurryPhotos, screenshotGroups: screenshotGroups
+            duplicateGroups: dupGroups, similarGroups: simGroups,
+            blurryPhotos: blurPhotos, screenshotGroups: ssGroups
         )
     }
 }

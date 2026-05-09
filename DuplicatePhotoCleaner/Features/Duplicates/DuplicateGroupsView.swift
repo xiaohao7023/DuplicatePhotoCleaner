@@ -37,13 +37,30 @@ struct DuplicateGroupsView: View {
                         },
                         onTapPhoto: { asset, category in
                             let filtered: [PHAsset]
+                            let reason: String
+                            let best = group.recommended
+                            let others = group.assets.filter { $0.localIdentifier != best.localIdentifier }
                             switch category {
                             case .best:
-                                filtered = [group.recommended]
+                                filtered = [best]
+                                let bestPixels = best.pixelWidth * best.pixelHeight
+                                let maxOtherPixels = others.map { $0.pixelWidth * $0.pixelHeight }.max() ?? 0
+                                if bestPixels > maxOtherPixels {
+                                    reason = "Highest resolution copy"
+                                } else {
+                                    reason = "Same resolution, most recent"
+                                }
                             case .others:
-                                filtered = group.assets.filter { $0.localIdentifier != group.recommended.localIdentifier }
+                                filtered = others
+                                let otherPixels = asset.pixelWidth * asset.pixelHeight
+                                let bestPixels = best.pixelWidth * best.pixelHeight
+                                if otherPixels < bestPixels {
+                                    reason = "Lower resolution than best"
+                                } else {
+                                    reason = "Same resolution, older copy"
+                                }
                             }
-                            previewContext = PhotoPreviewContext(assets: filtered, initialIndex: 0, category: category)
+                            previewContext = PhotoPreviewContext(assets: filtered, initialIndex: 0, category: category, reason: reason)
                         }
                     )
                 }
@@ -111,7 +128,7 @@ struct DuplicateGroupsView: View {
                 .environment(appState)
         }
         .sheet(item: $previewContext) { ctx in
-            FloatingPhotoPreview(assets: ctx.assets, initialIndex: ctx.initialIndex, category: ctx.category)
+            FloatingPhotoPreview(assets: ctx.assets, initialIndex: ctx.initialIndex, category: ctx.category, reason: ctx.reason)
         }
         .overlay(alignment: .top) {
             if showToast {
@@ -119,12 +136,11 @@ struct DuplicateGroupsView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation { showToast = false }
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = false }
                         }
                     }
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showToast)
         .onAppear {
             let othersIDs = groups.flatMap { group in
                 group.assets.filter { $0.localIdentifier != group.recommended.localIdentifier }.map(\.localIdentifier)
@@ -150,7 +166,7 @@ struct DuplicateGroupsView: View {
                 }
                 selectedForDeletion.removeAll()
                 toastMessage = "\(count) duplicate\(count > 1 ? "s" : "") deleted"
-                showToast = true
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
         }
     }

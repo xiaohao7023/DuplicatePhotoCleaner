@@ -41,6 +41,8 @@ actor DuplicateDetector {
 
     private func computeHash(for asset: PHAsset) async -> UInt64? {
         await withCheckedContinuation { continuation in
+            var didResume = false
+            let lock = NSLock()
             let opts = PHImageRequestOptions()
             opts.deliveryMode = .fastFormat
             opts.isNetworkAccessAllowed = false
@@ -49,6 +51,10 @@ actor DuplicateDetector {
                 for: asset, targetSize: CGSize(width: 256, height: 256),
                 contentMode: .aspectFill, options: opts
             ) { image, _ in
+                lock.lock()
+                guard !didResume else { lock.unlock(); return }
+                didResume = true
+                lock.unlock()
                 guard let cgImage = image?.cgImage else { continuation.resume(returning: nil); return }
                 continuation.resume(returning: PerceptualHash.compute(for: cgImage))
             }
@@ -57,9 +63,9 @@ actor DuplicateDetector {
 
     private func pickBest(in assets: [PHAsset]) -> PHAsset {
         assets.max(by: { a, b in
-            if a.pixelWidth * a.pixelHeight != b.pixelWidth * b.pixelHeight {
-                return a.pixelWidth * a.pixelHeight < b.pixelWidth * b.pixelHeight
-            }
+            let sa = a.pixelWidth * a.pixelHeight
+            let sb = b.pixelWidth * b.pixelHeight
+            if sa != sb { return sa < sb }
             return (a.creationDate ?? .distantPast) < (b.creationDate ?? .distantPast)
         }) ?? assets[0]
     }

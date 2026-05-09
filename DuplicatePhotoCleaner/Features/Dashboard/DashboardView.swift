@@ -14,6 +14,12 @@ struct DashboardView: View {
     @State private var ssState = CategoryScanState()
     @State private var orchestrator = ScanOrchestrator()
 
+    // Scan results (stored after scan completes, safe to read from main actor)
+    @State private var duplicateGroups: [DuplicateGroup] = []
+    @State private var similarGroups: [SimilarGroup] = []
+    @State private var blurryPhotos: [PhotoQuality] = []
+    @State private var screenshotGroups: [ScreenshotGroupData] = []
+
     // Navigation
     @State private var showResults = false
     @State private var navigateCategory: ScanCategory?
@@ -86,13 +92,13 @@ struct DashboardView: View {
     private func categoryDetailView(for category: ScanCategory) -> some View {
         switch category {
         case .duplicates:
-            DuplicateGroupsView(groups: orchestrator.duplicateGroups)
+            DuplicateGroupsView(groups: duplicateGroups)
         case .similar:
-            SimilarGroupsView(groups: orchestrator.similarGroups)
+            SimilarGroupsView(groups: similarGroups)
         case .blurry:
-            BlurryPhotosView(photos: orchestrator.blurryPhotos)
+            BlurryPhotosView(photos: blurryPhotos)
         case .screenshots:
-            ScreenshotsView(groups: orchestrator.screenshotGroups)
+            ScreenshotsView(groups: screenshotGroups)
         }
     }
 
@@ -114,13 +120,13 @@ struct DashboardView: View {
 
             switch category {
             case .duplicates:
-                await orchestrator.scanDuplicates(state: state, includeVideos: appState.includeVideos)
+                duplicateGroups = await orchestrator.scanDuplicates(state: state, includeVideos: appState.includeVideos)
             case .similar:
-                await orchestrator.scanSimilar(state: state, includeVideos: appState.includeVideos)
+                similarGroups = await orchestrator.scanSimilar(state: state, includeVideos: appState.includeVideos)
             case .blurry:
-                await orchestrator.scanBlurry(state: state, includeVideos: appState.includeVideos)
+                blurryPhotos = await orchestrator.scanBlurry(state: state, includeVideos: appState.includeVideos)
             case .screenshots:
-                await orchestrator.scanScreenshots(state: state)
+                screenshotGroups = await orchestrator.scanScreenshots(state: state)
             }
 
             navigateCategory = category

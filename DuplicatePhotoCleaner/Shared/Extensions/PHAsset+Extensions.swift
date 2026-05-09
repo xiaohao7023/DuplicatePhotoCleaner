@@ -1,6 +1,6 @@
 import Photos
 
-private var fileSizeCache: [String: Int64] = [:]
+nonisolated(unsafe) private var fileSizeCache: [String: Int64] = [:]
 private let cacheLock = NSLock()
 
 extension PHAsset {

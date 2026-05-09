@@ -54,12 +54,11 @@ struct ScreenshotsView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation { showToast = false }
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = false }
                         }
                     }
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showToast)
     }
 
     private func deletePhotos() {
@@ -78,7 +77,7 @@ struct ScreenshotsView: View {
                 }
                 selectedForDeletion.removeAll()
                 toastMessage = "\(count) screenshot\(count > 1 ? "s" : "") deleted"
-                showToast = true
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
         }
     }

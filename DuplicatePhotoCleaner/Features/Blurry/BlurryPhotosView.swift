@@ -76,12 +76,11 @@ struct BlurryPhotosView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation { showToast = false }
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = false }
                         }
                     }
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showToast)
     }
 
     private func deletePhotos() {
@@ -96,7 +95,7 @@ struct BlurryPhotosView: View {
                 photos.removeAll { selectedForDeletion.contains($0.asset.localIdentifier) }
                 selectedForDeletion.removeAll()
                 toastMessage = "\(count) photo\(count > 1 ? "s" : "") deleted"
-                showToast = true
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
         }
     }

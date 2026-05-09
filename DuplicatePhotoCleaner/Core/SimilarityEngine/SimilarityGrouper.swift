@@ -21,6 +21,7 @@ actor SimilarityGrouper {
 
         var used = Set<Int>()
         var groups: [SimilarGroup] = []
+        let threshold: Float = 0.85
 
         for i in 0..<features.count {
             if used.contains(i) { continue }
@@ -29,15 +30,23 @@ actor SimilarityGrouper {
             var totalSim: Float = 0
             var pairCount = 0
 
-            for j in (i + 1)..<features.count {
-                if used.contains(j) { continue }
-                let sim = CosineSimilarity.compute(features[i].feature, features[j].feature)
-                if sim >= 0.85 {
-                    groupIndices.append(j)
-                    used.insert(j)
-                    totalSim += sim
-                    pairCount += 1
+            // Compare against all current group members, not just the anchor
+            var checkIndex = i + 1
+            while checkIndex < features.count {
+                if used.contains(checkIndex) { checkIndex += 1; continue }
+                var bestSim: Float = 0
+                for memberIdx in groupIndices {
+                    let sim = CosineSimilarity.compute(features[memberIdx].feature, features[checkIndex].feature)
+                    if sim > bestSim { bestSim = sim }
                 }
+                if bestSim >= threshold {
+                    groupIndices.append(checkIndex)
+                    used.insert(checkIndex)
+                    totalSim += bestSim
+                    pairCount += 1
+                    // Re-check from the beginning of remaining items since the group grew
+                }
+                checkIndex += 1
             }
 
             if groupIndices.count > 1 {
@@ -45,7 +54,7 @@ actor SimilarityGrouper {
                 groups.append(SimilarGroup(
                     assets: groupAssets,
                     recommended: pickBest(in: groupAssets),
-                    averageSimilarity: pairCount > 0 ? totalSim / Float(pairCount) : 0.85
+                    averageSimilarity: pairCount > 0 ? totalSim / Float(pairCount) : threshold
                 ))
             }
             progress(0.7 + 0.3 * Double(i + 1) / Double(features.count))

@@ -19,20 +19,23 @@ struct PhotoPreviewContext: Identifiable, Equatable {
     let assets: [PHAsset]
     let initialIndex: Int
     let category: PhotoPreviewCategory
+    let reason: String
 }
 
 struct FloatingPhotoPreview: View {
     let assets: [PHAsset]
     let initialIndex: Int
     let category: PhotoPreviewCategory
+    let reason: String
     @Environment(\.dismiss) private var dismiss
     @State private var currentIndex: Int
     @State private var initialImage: UIImage?
 
-    init(assets: [PHAsset], initialIndex: Int = 0, category: PhotoPreviewCategory = .others) {
+    init(assets: [PHAsset], initialIndex: Int = 0, category: PhotoPreviewCategory = .others, reason: String = "") {
         self.assets = assets
         self.initialIndex = initialIndex
         self.category = category
+        self.reason = reason
         _currentIndex = State(initialValue: initialIndex)
     }
 
@@ -84,6 +87,12 @@ struct FloatingPhotoPreview: View {
                             value: current.resolutionFormatted, color: Color.appTeal)
                     InfoRow(icon: "calendar", label: "Date",
                             value: current.creationDateFormatted, color: Color.appCamel)
+                    if !reason.isEmpty {
+                        InfoRow(icon: category == .best ? "star.fill" : "info.circle",
+                                label: "Why",
+                                value: reason,
+                                color: category == .best ? Color.appSuccess : Color.appPurple)
+                    }
                 }
                 .padding(.top, 4)
                 .padding(.horizontal, 24)

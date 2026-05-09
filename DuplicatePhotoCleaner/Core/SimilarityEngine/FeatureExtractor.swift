@@ -19,6 +19,8 @@ struct FeatureExtractor: Sendable {
 
     nonisolated private static func requestImage(for asset: PHAsset) async -> CGImage? {
         await withCheckedContinuation { continuation in
+            var didResume = false
+            let lock = NSLock()
             let opts = PHImageRequestOptions()
             opts.deliveryMode = .highQualityFormat
             opts.isNetworkAccessAllowed = false
@@ -26,7 +28,13 @@ struct FeatureExtractor: Sendable {
             PHImageManager.default().requestImage(
                 for: asset, targetSize: CGSize(width: 512, height: 512),
                 contentMode: .aspectFill, options: opts
-            ) { image, _ in continuation.resume(returning: image?.cgImage) }
+            ) { image, _ in
+                lock.lock()
+                guard !didResume else { lock.unlock(); return }
+                didResume = true
+                lock.unlock()
+                continuation.resume(returning: image?.cgImage)
+            }
         }
     }
 }
