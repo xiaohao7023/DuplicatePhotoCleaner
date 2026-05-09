@@ -2,7 +2,8 @@ import SwiftUI
 import Photos
 
 struct BlurryPhotosView: View {
-    @State var photos: [PhotoQuality]
+    let photos: [PhotoQuality]
+    var onPhotosChanged: (([PhotoQuality]) -> Void)?
     @Environment(AppState.self) private var appState
     @State private var selectedForDeletion: Set<String> = []
     @State private var showDeleteConfirmation = false
@@ -92,8 +93,9 @@ struct BlurryPhotosView: View {
             await MainActor.run {
                 HapticManager.notification(.success)
                 appState.recordCleanup(freedBytes: bytes, deletedCount: count)
-                photos.removeAll { selectedForDeletion.contains($0.asset.localIdentifier) }
+                let updated = photos.filter { !selectedForDeletion.contains($0.asset.localIdentifier) }
                 selectedForDeletion.removeAll()
+                onPhotosChanged?(updated)
                 toastMessage = "\(count) photo\(count > 1 ? "s" : "") deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }

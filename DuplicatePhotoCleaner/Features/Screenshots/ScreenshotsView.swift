@@ -2,7 +2,8 @@ import SwiftUI
 import Photos
 
 struct ScreenshotsView: View {
-    @State var groups: [ScreenshotGroupData]
+    let groups: [ScreenshotGroupData]
+    var onGroupsChanged: (([ScreenshotGroupData]) -> Void)?
     @Environment(AppState.self) private var appState
     @State private var selectedForDeletion: Set<String> = []
     @State private var showDeleteConfirmation = false
@@ -70,12 +71,13 @@ struct ScreenshotsView: View {
             await MainActor.run {
                 HapticManager.notification(.success)
                 appState.recordCleanup(freedBytes: bytes, deletedCount: count)
-                groups = groups.compactMap { g in
+                let updated = groups.compactMap { g -> ScreenshotGroupData? in
                     let remaining = g.assets.filter { !selectedForDeletion.contains($0.localIdentifier) }
                     guard !remaining.isEmpty else { return nil }
                     return ScreenshotGroupData(group: g.group, assets: remaining, totalSize: remaining.reduce(0) { $0 + $1.fileSizeBytes })
                 }
                 selectedForDeletion.removeAll()
+                onGroupsChanged?(updated)
                 toastMessage = "\(count) screenshot\(count > 1 ? "s" : "") deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }

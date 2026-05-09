@@ -92,13 +92,13 @@ struct DashboardView: View {
     private func categoryDetailView(for category: ScanCategory) -> some View {
         switch category {
         case .duplicates:
-            DuplicateGroupsView(groups: duplicateGroups)
+            DuplicateGroupsView(groups: duplicateGroups) { duplicateGroups = $0 }
         case .similar:
-            SimilarGroupsView(groups: similarGroups)
+            SimilarGroupsView(groups: similarGroups) { similarGroups = $0 }
         case .blurry:
-            BlurryPhotosView(photos: blurryPhotos)
+            BlurryPhotosView(photos: blurryPhotos) { blurryPhotos = $0 }
         case .screenshots:
-            ScreenshotsView(groups: screenshotGroups)
+            ScreenshotsView(groups: screenshotGroups) { screenshotGroups = $0 }
         }
     }
 

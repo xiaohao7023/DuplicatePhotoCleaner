@@ -2,7 +2,8 @@ import SwiftUI
 import Photos
 
 struct DuplicateGroupsView: View {
-    @State var groups: [DuplicateGroup]
+    let groups: [DuplicateGroup]
+    var onGroupsChanged: (([DuplicateGroup]) -> Void)?
     @Environment(AppState.self) private var appState
     @State private var selectedForDeletion: Set<String> = []
     @State private var showDeleteConfirmation = false
@@ -159,12 +160,13 @@ struct DuplicateGroupsView: View {
                 HapticManager.notification(.success)
                 appState.recordCleanup(freedBytes: bytes, deletedCount: count)
                 let deletedIDs = selectedForDeletion
-                groups = groups.compactMap { g in
+                let updated = groups.compactMap { g -> DuplicateGroup? in
                     let remaining = g.assets.filter { !deletedIDs.contains($0.localIdentifier) }
                     guard remaining.count > 1 else { return nil }
                     return DuplicateGroup(assets: remaining, recommended: g.recommended)
                 }
                 selectedForDeletion.removeAll()
+                onGroupsChanged?(updated)
                 toastMessage = "\(count) duplicate\(count > 1 ? "s" : "") deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
