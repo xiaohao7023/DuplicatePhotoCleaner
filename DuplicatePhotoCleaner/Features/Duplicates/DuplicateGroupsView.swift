@@ -45,20 +45,28 @@ struct DuplicateGroupsView: View {
                             case .best:
                                 filtered = [best]
                                 let bestPixels = best.pixelWidth * best.pixelHeight
+                                let bestSize = best.fileSizeBytes
                                 let maxOtherPixels = others.map { $0.pixelWidth * $0.pixelHeight }.max() ?? 0
+                                let maxOtherSize = others.map { $0.fileSizeBytes }.max() ?? 0
                                 if bestPixels > maxOtherPixels {
-                                    reason = "Highest resolution copy"
+                                    reason = "Highest resolution"
+                                } else if bestSize > maxOtherSize {
+                                    reason = "Largest file size (better quality)"
                                 } else {
-                                    reason = "Same resolution, most recent"
+                                    reason = "Original copy (oldest)"
                                 }
                             case .others:
                                 filtered = others
                                 let otherPixels = asset.pixelWidth * asset.pixelHeight
+                                let otherSize = asset.fileSizeBytes
                                 let bestPixels = best.pixelWidth * best.pixelHeight
+                                let bestSize = best.fileSizeBytes
                                 if otherPixels < bestPixels {
-                                    reason = "Lower resolution than best"
+                                    reason = "Lower resolution"
+                                } else if otherSize < bestSize {
+                                    reason = "Smaller file (more compressed)"
                                 } else {
-                                    reason = "Same resolution, older copy"
+                                    reason = "Same quality, newer copy"
                                 }
                             }
                             previewContext = PhotoPreviewContext(assets: filtered, initialIndex: 0, category: category, reason: reason)

@@ -66,6 +66,11 @@ actor DuplicateDetector {
             let sa = a.pixelWidth * a.pixelHeight
             let sb = b.pixelWidth * b.pixelHeight
             if sa != sb { return sa < sb }
+            // Same resolution: larger file = less compression = better quality
+            let fa = a.fileSizeBytes
+            let fb = b.fileSizeBytes
+            if fa != fb { return fa < fb }
+            // Same size: prefer original (older)
             return (a.creationDate ?? .distantPast) < (b.creationDate ?? .distantPast)
         }) ?? assets[0]
     }
