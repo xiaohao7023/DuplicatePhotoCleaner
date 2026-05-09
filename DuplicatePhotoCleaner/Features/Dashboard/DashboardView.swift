@@ -1,5 +1,13 @@
 import SwiftUI
 
+@Observable
+class ScanResultData {
+    var duplicateGroups: [DuplicateGroup] = []
+    var similarGroups: [SimilarGroup] = []
+    var blurryPhotos: [PhotoQuality] = []
+    var screenshotGroups: [ScreenshotGroupData] = []
+}
+
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var storageInfo: (used: Double, total: Double) = (0, 0)
@@ -14,11 +22,8 @@ struct DashboardView: View {
     @State private var ssState = CategoryScanState()
     @State private var orchestrator = ScanOrchestrator()
 
-    // Scan results (stored after scan completes, safe to read from main actor)
-    @State private var duplicateGroups: [DuplicateGroup] = []
-    @State private var similarGroups: [SimilarGroup] = []
-    @State private var blurryPhotos: [PhotoQuality] = []
-    @State private var screenshotGroups: [ScreenshotGroupData] = []
+    // Scan results (reference type — detail views see updates immediately)
+    @State private var scanData = ScanResultData()
 
     // Navigation
     @State private var showResults = false
@@ -92,13 +97,13 @@ struct DashboardView: View {
     private func categoryDetailView(for category: ScanCategory) -> some View {
         switch category {
         case .duplicates:
-            DuplicateGroupsView(groups: duplicateGroups) { duplicateGroups = $0 }
+            DuplicateGroupsView(groups: scanData.duplicateGroups) { scanData.duplicateGroups = $0 }
         case .similar:
-            SimilarGroupsView(groups: similarGroups) { similarGroups = $0 }
+            SimilarGroupsView(groups: scanData.similarGroups) { scanData.similarGroups = $0 }
         case .blurry:
-            BlurryPhotosView(photos: blurryPhotos) { blurryPhotos = $0 }
+            BlurryPhotosView(photos: scanData.blurryPhotos) { scanData.blurryPhotos = $0 }
         case .screenshots:
-            ScreenshotsView(groups: screenshotGroups) { screenshotGroups = $0 }
+            ScreenshotsView(groups: scanData.screenshotGroups) { scanData.screenshotGroups = $0 }
         }
     }
 
@@ -120,19 +125,16 @@ struct DashboardView: View {
 
             switch category {
             case .duplicates:
-                duplicateGroups = await orchestrator.scanDuplicates(state: state, includeVideos: appState.includeVideos)
+                scanData.duplicateGroups = await orchestrator.scanDuplicates(state: state, includeVideos: appState.includeVideos)
             case .similar:
-                similarGroups = await orchestrator.scanSimilar(state: state, includeVideos: appState.includeVideos)
+                scanData.similarGroups = await orchestrator.scanSimilar(state: state, includeVideos: appState.includeVideos)
             case .blurry:
-                blurryPhotos = await orchestrator.scanBlurry(state: state, includeVideos: appState.includeVideos)
+                scanData.blurryPhotos = await orchestrator.scanBlurry(state: state, includeVideos: appState.includeVideos)
             case .screenshots:
-                screenshotGroups = await orchestrator.scanScreenshots(state: state)
+                scanData.screenshotGroups = await orchestrator.scanScreenshots(state: state)
             }
 
-            // Delay navigation to next run loop so SwiftUI commits the data update first
-            DispatchQueue.main.async {
-                navigateCategory = category
-            }
+            navigateCategory = category
         }
     }
 
