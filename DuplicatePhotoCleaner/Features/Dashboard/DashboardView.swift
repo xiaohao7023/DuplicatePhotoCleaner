@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 
 @Observable
 class ScanResultData {
