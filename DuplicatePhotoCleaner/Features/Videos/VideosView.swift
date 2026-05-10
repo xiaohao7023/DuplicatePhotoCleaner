@@ -104,9 +104,7 @@ struct VideosView: View {
             if let asset = previewAsset {
                 VideoPreviewSheet(asset: asset) {
                     previewAsset = nil
-                    selectedForDeletion.insert(asset.localIdentifier)
-                    if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
-                    else { deleteSelected() }
+                    deleteAsset(asset)
                 }
                 .environment(appState)
             }
@@ -138,6 +136,21 @@ struct VideosView: View {
                 selectedForDeletion.removeAll()
                 onVideosChanged?(updated)
                 toastMessage = "\(count) video\(count > 1 ? "s" : "") deleted"
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
+            }
+        }
+    }
+
+    private func deleteAsset(_ asset: PHAsset) {
+        let bytes = asset.fileSizeBytes
+        Task {
+            try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets([asset] as NSArray) }
+            await MainActor.run {
+                HapticManager.notification(.success)
+                appState.recordCleanup(freedBytes: bytes, deletedCount: 1)
+                let updated = videos.filter { $0.localIdentifier != asset.localIdentifier }
+                onVideosChanged?(updated)
+                toastMessage = "Video deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
         }
@@ -276,6 +289,7 @@ private struct VideoPreviewSheet: View {
                     VideoPlayer(player: player)
                         .ignoresSafeArea()
                         .onAppear { player.play() }
+                        .onDisappear { player.pause() }
                 }
             }
 

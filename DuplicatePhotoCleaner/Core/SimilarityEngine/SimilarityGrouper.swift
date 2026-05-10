@@ -44,7 +44,6 @@ actor SimilarityGrouper {
                     used.insert(checkIndex)
                     totalSim += bestSim
                     pairCount += 1
-                    // Re-check from the beginning of remaining items since the group grew
                 }
                 checkIndex += 1
             }

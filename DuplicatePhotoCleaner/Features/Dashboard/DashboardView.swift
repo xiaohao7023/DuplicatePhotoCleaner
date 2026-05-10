@@ -149,7 +149,9 @@ struct DashboardView: View {
 
     private func performScan(_ category: ScanCategory) async {
         let state = stateFor(category)
-        state.reset()
+        state.isScanning = true
+        state.isDone = false
+        state.progress = 0
 
         switch category {
         case .duplicates:
