@@ -3,10 +3,10 @@ import SwiftUI
 
 enum ScanCategory: String, CaseIterable, Identifiable {
     case duplicates = "Duplicates"
+    case videos = "Videos"
     case similar = "Similar"
     case blurry = "Blurry"
     case screenshots = "Screenshots"
-    case videos = "Videos"
 
     var id: String { rawValue }
     var icon: String {

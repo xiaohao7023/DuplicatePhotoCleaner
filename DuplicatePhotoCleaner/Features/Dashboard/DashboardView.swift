@@ -58,6 +58,12 @@ struct DashboardView: View {
                         )
 
                         ScanCategoryTile(
+                            category: .videos, state: vidState,
+                            onScan: { startScan(.videos) },
+                            onNavigate: { navigate(to: .videos) }
+                        )
+
+                        ScanCategoryTile(
                             category: .similar, state: simState,
                             onScan: { startScan(.similar) },
                             onNavigate: { navigate(to: .similar) }
@@ -73,12 +79,6 @@ struct DashboardView: View {
                             category: .screenshots, state: ssState,
                             onScan: { startScan(.screenshots) },
                             onNavigate: { navigate(to: .screenshots) }
-                        )
-
-                        ScanCategoryTile(
-                            category: .videos, state: vidState,
-                            onScan: { startScan(.videos) },
-                            onNavigate: { navigate(to: .videos) }
                         )
                         .gridCellColumns(2)
                     }
