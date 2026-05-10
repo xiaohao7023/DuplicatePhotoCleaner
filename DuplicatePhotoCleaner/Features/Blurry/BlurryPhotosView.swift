@@ -107,26 +107,34 @@ private struct BlurryCell: View {
     let photo: PhotoQuality; let isSelected: Bool; let onTap: () -> Void
     @State private var thumbnail: UIImage?
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .topTrailing) {
             if let thumbnail {
                 Image(uiImage: thumbnail).resizable().aspectRatio(1, contentMode: .fill).clipped()
             } else {
                 Rectangle().fill(Color.appBackgroundTertiary).aspectRatio(1, contentMode: .fill)
                     .onAppear { loadThumbnail() }
             }
+            // Blur score badge
             Text(String(format: "%.0f", photo.blurScore))
                 .font(.appMicro).foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 3)
                 .background(Capsule().fill(photo.blurLevel == .veryBlurry ? Color.appDanger : Color.appWarning))
-                .padding(6)
+                .padding(5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+
+            // Selection badge
+            ZStack {
+                Circle()
+                    .fill(isSelected ? Color.appDanger : Color.black.opacity(0.35))
+                    .frame(width: 22, height: 22)
+                Image(systemName: isSelected ? "checkmark" : "plus")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .padding(5)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onTap)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.appDanger, lineWidth: 3)
-                Image(systemName: "checkmark.circle.fill").font(.system(size: 20)).foregroundStyle(.white, Color.appDanger)
-            }
-        }
-        .onTapGesture(perform: onTap)
     }
     private func loadThumbnail() {
         let opts = PHImageRequestOptions(); opts.deliveryMode = .opportunistic; opts.isNetworkAccessAllowed = false

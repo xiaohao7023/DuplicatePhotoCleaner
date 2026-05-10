@@ -298,13 +298,6 @@ private struct DupSelectableThumb: View {
             .contentShape(Rectangle())
             .onTapGesture { onPreview() }
 
-            // Selection border
-            if isSelected {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .strokeBorder(Color.appDanger, lineWidth: 2.5)
-                    .allowsHitTesting(false)
-            }
-
             // Checkbox - tap to toggle selection
             ZStack {
                 Circle()

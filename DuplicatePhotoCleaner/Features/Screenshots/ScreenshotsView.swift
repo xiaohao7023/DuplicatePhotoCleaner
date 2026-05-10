@@ -94,13 +94,12 @@ private struct ScreenshotSection: View {
         RoundedCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Image(systemName: "clock").font(.system(size: 18)).foregroundStyle(Color.appPurple).frame(width: 24)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(groupData.group.rawValue).font(.appBody).foregroundStyle(Color.appTextPrimary)
-                        Text("\(groupData.assets.count) screenshots  •  \(formatBytes(groupData.totalSize))")
-                            .font(.appCaption).foregroundStyle(Color.appTextSecondary)
-                    }
+                    Text(groupData.group.rawValue)
+                        .font(.appSmallSemibold).foregroundStyle(Color.appTextSecondary)
+                        .textCase(.uppercase).tracking(0.6)
                     Spacer()
+                    Text("\(groupData.assets.count) screenshots  •  \(formatBytes(groupData.totalSize))")
+                        .font(.appCaption).foregroundStyle(Color.appPurple)
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)], spacing: 4) {
@@ -129,15 +128,19 @@ private struct SSThumb: View {
             } else {
                 Rectangle().fill(Color.appBackgroundTertiary).frame(height: 80).onAppear { loadThumbnail() }
             }
-            if isSelected {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.appDanger.opacity(0.3))
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 18)).foregroundStyle(.white, Color.appDanger)
-                }
+            ZStack {
+                Circle()
+                    .fill(isSelected ? Color.appDanger : Color.black.opacity(0.35))
+                    .frame(width: 22, height: 22)
+                Image(systemName: isSelected ? "checkmark" : "plus")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
             }
+            .padding(5)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onTap)
         }
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .onTapGesture(perform: onTap)
     }
     private func loadThumbnail() {
         let opts = PHImageRequestOptions(); opts.deliveryMode = .opportunistic; opts.isNetworkAccessAllowed = false
