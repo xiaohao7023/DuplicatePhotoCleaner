@@ -29,6 +29,17 @@ struct DashboardView: View {
     @State private var showResults = false
     @State private var navigateCategory: ScanCategory?
 
+    // Auto-scan
+    @State private var lastFullScanAt: Date? = {
+        let ts = UserDefaults.standard.double(forKey: "lastFullScanAt")
+        return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
+    }()
+
+    private let gridColumns = [
+        GridItem(.flexible(), spacing: Layout.cardSpacing),
+        GridItem(.flexible(), spacing: Layout.cardSpacing)
+    ]
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -36,34 +47,31 @@ struct DashboardView: View {
                     StorageOverviewView(usedGB: storageInfo.used, totalGB: storageInfo.total,
                                         freedBytes: appState.cumulativeFreedBytes, deletedCount: appState.cumulativeDeletedCount)
 
-                    // 4 scan cards
-                    ScanCategoryCard(
-                        category: .duplicates, state: dupState,
-                        description: "Find identical photos",
-                        onScan: { startScan(.duplicates) },
-                        onNavigate: { navigate(to: .duplicates) }
-                    )
+                    LazyVGrid(columns: gridColumns, spacing: Layout.cardSpacing) {
+                        ScanCategoryTile(
+                            category: .duplicates, state: dupState,
+                            onScan: { startScan(.duplicates) },
+                            onNavigate: { navigate(to: .duplicates) }
+                        )
 
-                    ScanCategoryCard(
-                        category: .similar, state: simState,
-                        description: "Find similar photos in same scene",
-                        onScan: { startScan(.similar) },
-                        onNavigate: { navigate(to: .similar) }
-                    )
+                        ScanCategoryTile(
+                            category: .similar, state: simState,
+                            onScan: { startScan(.similar) },
+                            onNavigate: { navigate(to: .similar) }
+                        )
 
-                    ScanCategoryCard(
-                        category: .blurry, state: blurState,
-                        description: "Detect blurry and out-of-focus photos",
-                        onScan: { startScan(.blurry) },
-                        onNavigate: { navigate(to: .blurry) }
-                    )
+                        ScanCategoryTile(
+                            category: .blurry, state: blurState,
+                            onScan: { startScan(.blurry) },
+                            onNavigate: { navigate(to: .blurry) }
+                        )
 
-                    ScanCategoryCard(
-                        category: .screenshots, state: ssState,
-                        description: "Clean up old screenshots",
-                        onScan: { startScan(.screenshots) },
-                        onNavigate: { navigate(to: .screenshots) }
-                    )
+                        ScanCategoryTile(
+                            category: .screenshots, state: ssState,
+                            onScan: { startScan(.screenshots) },
+                            onNavigate: { navigate(to: .screenshots) }
+                        )
+                    }
                 }
                 .padding(.horizontal, Layout.pageHorizontalPadding)
                 .padding(.top, Layout.headerToContent)
@@ -84,7 +92,10 @@ struct DashboardView: View {
                 categoryDetailView(for: category)
             }
         }
-        .onAppear { loadStorageInfo() }
+        .onAppear {
+            loadStorageInfo()
+            autoScanIfNeeded()
+        }
         .alert("Photo Access Required", isPresented: $showPermissionAlert) {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -119,6 +130,24 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Scan Logic
+
+    private func performScan(_ category: ScanCategory) async {
+        let state = stateFor(category)
+        state.reset()
+
+        switch category {
+        case .duplicates:
+            scanData.duplicateGroups = await orchestrator.scanDuplicates(state: state, includeVideos: appState.includeVideos)
+        case .similar:
+            scanData.similarGroups = await orchestrator.scanSimilar(state: state, includeVideos: appState.includeVideos)
+        case .blurry:
+            scanData.blurryPhotos = await orchestrator.scanBlurry(state: state, includeVideos: appState.includeVideos)
+        case .screenshots:
+            scanData.screenshotGroups = await orchestrator.scanScreenshots(state: state)
+        }
+    }
+
     private func startScan(_ category: ScanCategory) {
         Task {
             let status = await permissionManager.requestPermission()
@@ -132,21 +161,28 @@ struct DashboardView: View {
                 return
             }
 
-            let state = stateFor(category)
-            state.reset()
+            await performScan(category)
+            navigateCategory = category
+        }
+    }
 
-            switch category {
-            case .duplicates:
-                scanData.duplicateGroups = await orchestrator.scanDuplicates(state: state, includeVideos: appState.includeVideos)
-            case .similar:
-                scanData.similarGroups = await orchestrator.scanSimilar(state: state, includeVideos: appState.includeVideos)
-            case .blurry:
-                scanData.blurryPhotos = await orchestrator.scanBlurry(state: state, includeVideos: appState.includeVideos)
-            case .screenshots:
-                scanData.screenshotGroups = await orchestrator.scanScreenshots(state: state)
+    private func autoScanIfNeeded() {
+        // Skip if any scan is in progress
+        guard !dupState.isScanning, !simState.isScanning, !blurState.isScanning, !ssState.isScanning else { return }
+
+        // Skip if scanned within last 5 minutes
+        if let last = lastFullScanAt, Date().timeIntervalSince(last) < 300 { return }
+
+        Task {
+            let status = await permissionManager.requestPermission()
+            guard status == .authorized || status == .limited else { return }
+
+            for category in ScanCategory.allCases {
+                await performScan(category)
             }
 
-            navigateCategory = category
+            lastFullScanAt = Date()
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastFullScanAt")
         }
     }
 
@@ -177,83 +213,71 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Scan Category Card
-private struct ScanCategoryCard: View {
+// MARK: - Scan Category Tile
+
+private struct ScanCategoryTile: View {
     let category: ScanCategory
     @Bindable var state: CategoryScanState
-    let description: String
     let onScan: () -> Void
     var onNavigate: (() -> Void)? = nil
 
     var body: some View {
         RoundedCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                            .fill(category.color.opacity(0.12))
-                            .frame(width: 48, height: 48)
-                        Image(systemName: category.icon)
-                            .font(.system(size: 22))
-                            .foregroundStyle(category.color)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(category.rawValue)
-                            .font(.appH3)
-                            .foregroundStyle(Color.appTextPrimary)
-                        Text(description)
-                            .font(.appCaption)
-                            .foregroundStyle(Color.appTextSecondary)
-                    }
-
-                    Spacer()
+            VStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                        .fill(category.color.opacity(0.12))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: category.icon)
+                        .font(.system(size: 22))
+                        .foregroundStyle(category.color)
                 }
 
+                Text(category.rawValue)
+                    .font(.appSmallSemibold)
+                    .foregroundStyle(Color.appTextPrimary)
+
                 if state.isScanning {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 4) {
                         ProgressBar(value: state.progress, color: category.color)
                         Text("Scanning...")
-                            .font(.appTiny)
+                            .font(.appMicro)
                             .foregroundStyle(Color.appTextTertiary)
                     }
                 } else if state.isDone {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(state.count) found")
-                                .font(.appSmallSemibold)
-                                .foregroundStyle(Color.appTextPrimary)
-                            Text(formatBytes(state.sizeBytes))
-                                .font(.appTiny)
-                                .foregroundStyle(Color.appTextSecondary)
-                        }
-                        Spacer()
-                        StatusTag(text: state.count > 0 ? "Clean Up" : "All Clean", type: state.count > 0 ? .info : .success)
+                    VStack(spacing: 2) {
+                        Text("\(state.count)")
+                            .font(.appH3)
+                            .foregroundStyle(state.count > 0 ? Color.appTextPrimary : Color.appSuccess)
+                        Text(state.count > 0 ? formatBytes(state.sizeBytes) : "All Clean")
+                            .font(.appMicro)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
                 } else {
                     Button(action: onScan) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             Image(systemName: "sparkle.magnifyingglass")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 11, weight: .semibold))
                             Text("Scan")
-                                .font(.appSmallSemibold)
+                                .font(.appMicro)
                         }
                         .foregroundStyle(category.color)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14).padding(.vertical, 6)
                         .background(
-                            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                                .fill(category.color.opacity(0.08))
+                            Capsule().fill(category.color.opacity(0.08))
                         )
                     }
                     .buttonStyle(.plain)
                     .pressableScale(0.97)
                 }
             }
+            .frame(maxWidth: .infinity)
         }
         .onTapGesture {
             if state.isDone && state.count > 0 {
                 onNavigate?()
+            } else if !state.isScanning && !state.isDone {
+                onScan()
             }
         }
     }
