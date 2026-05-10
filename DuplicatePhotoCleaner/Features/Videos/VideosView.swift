@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import AVKit
 
 struct VideosView: View {
     let videos: [PHAsset]
@@ -239,6 +240,8 @@ private struct VideoPreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var thumbnail: UIImage?
     @State private var showDeleteConfirmation = false
+    @State private var player: AVPlayer?
+    @State private var showPlayer = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -267,6 +270,14 @@ private struct VideoPreviewSheet: View {
             .frame(height: 360)
             .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
             .padding(.horizontal, 24)
+            .onTapGesture { playVideo() }
+            .fullScreenCover(isPresented: $showPlayer) {
+                if let player {
+                    VideoPlayer(player: player)
+                        .ignoresSafeArea()
+                        .onAppear { player.play() }
+                }
+            }
 
             // Info
             VStack(spacing: 10) {
@@ -326,6 +337,19 @@ private struct VideoPreviewSheet: View {
             let isDegraded = info?[PHImageResultIsDegradedKey] as? Bool ?? false
             if let img, !isDegraded {
                 DispatchQueue.main.async { self.thumbnail = img }
+            }
+        }
+    }
+
+    private func playVideo() {
+        let opts = PHVideoRequestOptions()
+        opts.isNetworkAccessAllowed = true
+        opts.deliveryMode = .automatic
+        PHImageManager.default().requestAVAsset(forVideo: asset, options: opts) { avAsset, _, _ in
+            guard let avAsset else { return }
+            DispatchQueue.main.async {
+                self.player = AVPlayer(playerItem: AVPlayerItem(asset: avAsset))
+                self.showPlayer = true
             }
         }
     }

@@ -187,8 +187,9 @@ struct DashboardView: View {
         // Skip if any scan is in progress
         guard !dupState.isScanning, !simState.isScanning, !blurState.isScanning, !ssState.isScanning, !vidState.isScanning else { return }
 
-        // Skip if scanned within last 5 minutes
-        if let last = lastFullScanAt, Date().timeIntervalSince(last) < 300 { return }
+        // Skip only if all scans already completed AND within cooldown
+        let allDone = dupState.isDone && simState.isDone && blurState.isDone && ssState.isDone && vidState.isDone
+        if allDone, let last = lastFullScanAt, Date().timeIntervalSince(last) < 300 { return }
 
         Task {
             let status = await permissionManager.requestPermission()
