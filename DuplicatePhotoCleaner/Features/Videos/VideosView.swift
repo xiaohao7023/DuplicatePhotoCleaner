@@ -79,13 +79,18 @@ struct VideosView: View {
             DeletePreferencePickerView { deleteSelected() }
                 .environment(appState)
         }
-        .sheet(item: $previewAsset) { asset in
-            VideoPreviewSheet(asset: asset) {
-                selectedVideoID = asset.localIdentifier
-                if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
-                else { deleteSelected() }
+        .sheet(isPresented: Binding(
+            get: { previewAsset != nil },
+            set: { if !$0 { previewAsset = nil } }
+        )) {
+            if let asset = previewAsset {
+                VideoPreviewSheet(asset: asset) {
+                    selectedVideoID = asset.localIdentifier
+                    if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
+                    else { deleteSelected() }
+                }
+                .environment(appState)
             }
-            .environment(appState)
         }
         .overlay(alignment: .top) {
             if showToast {
@@ -320,13 +325,5 @@ private struct VideoPreviewSheet: View {
                 .font(.appCaptionMedium)
                 .foregroundStyle(Color.appTextPrimary)
         }
-    }
-}
-
-// Make PHAsset work with .sheet(item:)
-extension PHAsset: @retroactive Identifiable {}
-extension PHAsset: @retroactive Equatable {
-    public static func == (lhs: PHAsset, rhs: PHAsset) -> Bool {
-        lhs.localIdentifier == rhs.localIdentifier
     }
 }
