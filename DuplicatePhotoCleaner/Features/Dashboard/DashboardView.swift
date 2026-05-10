@@ -6,6 +6,7 @@ class ScanResultData {
     var similarGroups: [SimilarGroup] = []
     var blurryPhotos: [PhotoQuality] = []
     var screenshotGroups: [ScreenshotGroupData] = []
+    var videos: [PHAsset] = []
 }
 
 struct DashboardView: View {
@@ -20,6 +21,7 @@ struct DashboardView: View {
     @State private var simState = CategoryScanState()
     @State private var blurState = CategoryScanState()
     @State private var ssState = CategoryScanState()
+    @State private var vidState = CategoryScanState()
     @State private var orchestrator = ScanOrchestrator()
 
     // Scan results (reference type — detail views see updates immediately)
@@ -71,6 +73,13 @@ struct DashboardView: View {
                             onScan: { startScan(.screenshots) },
                             onNavigate: { navigate(to: .screenshots) }
                         )
+
+                        ScanCategoryTile(
+                            category: .videos, state: vidState,
+                            onScan: { startScan(.videos) },
+                            onNavigate: { navigate(to: .videos) }
+                        )
+                        .gridCellColumns(2)
                     }
                 }
                 .padding(.horizontal, Layout.pageHorizontalPadding)
@@ -127,6 +136,11 @@ struct DashboardView: View {
                 scanData.screenshotGroups = $0
                 ssState.update(fromScreenshotGroups: $0)
             }
+        case .videos:
+            VideosView(videos: scanData.videos) {
+                scanData.videos = $0
+                vidState.update(fromVideos: $0)
+            }
         }
     }
 
@@ -145,6 +159,8 @@ struct DashboardView: View {
             scanData.blurryPhotos = await orchestrator.scanBlurry(state: state, includeVideos: appState.includeVideos)
         case .screenshots:
             scanData.screenshotGroups = await orchestrator.scanScreenshots(state: state)
+        case .videos:
+            scanData.videos = await orchestrator.scanVideos(state: state)
         }
     }
 
@@ -168,7 +184,7 @@ struct DashboardView: View {
 
     private func autoScanIfNeeded() {
         // Skip if any scan is in progress
-        guard !dupState.isScanning, !simState.isScanning, !blurState.isScanning, !ssState.isScanning else { return }
+        guard !dupState.isScanning, !simState.isScanning, !blurState.isScanning, !ssState.isScanning, !vidState.isScanning else { return }
 
         // Skip if scanned within last 5 minutes
         if let last = lastFullScanAt, Date().timeIntervalSince(last) < 300 { return }
@@ -203,6 +219,7 @@ struct DashboardView: View {
         case .similar: return simState
         case .blurry: return blurState
         case .screenshots: return ssState
+        case .videos: return vidState
         }
     }
 

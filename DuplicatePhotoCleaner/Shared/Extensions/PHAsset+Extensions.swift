@@ -43,4 +43,11 @@ extension PHAsset {
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
+
+    nonisolated var durationFormatted: String {
+        guard duration > 0 else { return "" }
+        let m = Int(duration) / 60
+        let s = Int(duration) % 60
+        return String(format: "%d:%02d", m, s)
+    }
 }

@@ -12,6 +12,16 @@ actor PhotoLibraryManager {
         return assets
     }
 
+    func fetchVideos() -> [PHAsset] {
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.video.rawValue)
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let results = PHAsset.fetchAssets(with: options)
+        var assets: [PHAsset] = []
+        results.enumerateObjects { asset, _, _ in assets.append(asset) }
+        return assets
+    }
+
     func deleteAssets(_ assets: [PHAsset]) async throws {
         try await PHPhotoLibrary.shared().performChanges {
             PHAssetChangeRequest.deleteAssets(assets as NSArray)

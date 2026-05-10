@@ -6,6 +6,7 @@ enum ScanCategory: String, CaseIterable, Identifiable {
     case similar = "Similar"
     case blurry = "Blurry"
     case screenshots = "Screenshots"
+    case videos = "Videos"
 
     var id: String { rawValue }
     var icon: String {
@@ -14,6 +15,7 @@ enum ScanCategory: String, CaseIterable, Identifiable {
         case .similar: return "square.stack.3d.up.fill"
         case .blurry: return "eye.trianglebadge.exclamationmark"
         case .screenshots: return "camera.viewfinder"
+        case .videos: return "film.fill"
         }
     }
     var color: Color {
@@ -22,6 +24,7 @@ enum ScanCategory: String, CaseIterable, Identifiable {
         case .similar: return .appTeal
         case .blurry: return .appWarning
         case .screenshots: return .appPurple
+        case .videos: return .appCamel
         }
     }
 }
@@ -60,6 +63,11 @@ class CategoryScanState {
     func update(fromScreenshotGroups groups: [ScreenshotGroupData]) {
         count = groups.reduce(0) { $0 + $1.assets.count }
         sizeBytes = groups.reduce(Int64(0)) { $0 + $1.totalSize }
+    }
+
+    func update(fromVideos videos: [PHAsset]) {
+        count = videos.count
+        sizeBytes = videos.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
     }
 }
 
@@ -131,6 +139,18 @@ actor ScanOrchestrator {
             state.isScanning = false; state.isDone = true; state.progress = 1
         }
         return results
+    }
+
+    func scanVideos(state: CategoryScanState) async -> [PHAsset] {
+        await MainActor.run { state.isScanning = true; state.isDone = false; state.progress = 0.5 }
+        let videos = await photoLibrary.fetchVideos()
+        let sorted = videos.sorted { $0.fileSizeBytes > $1.fileSizeBytes }
+        let bytes = sorted.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
+        await MainActor.run {
+            state.count = sorted.count; state.sizeBytes = bytes
+            state.isScanning = false; state.isDone = true; state.progress = 1
+        }
+        return sorted
     }
 
     // MARK: - Full scan (legacy)
