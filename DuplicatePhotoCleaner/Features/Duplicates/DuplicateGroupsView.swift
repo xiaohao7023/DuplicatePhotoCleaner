@@ -298,21 +298,25 @@ private struct DupSelectableThumb: View {
             .contentShape(Rectangle())
             .onTapGesture { onPreview() }
 
-            // Selection tint overlay
+            // Selection border
             if isSelected {
                 RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .fill(Color.appDanger.opacity(0.25))
+                    .strokeBorder(Color.appDanger, lineWidth: 2.5)
                     .allowsHitTesting(false)
             }
 
             // Checkbox - tap to toggle selection
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 22))
-                .foregroundStyle(isSelected ? Color.appDanger : .white.opacity(0.8))
-                .shadow(color: .black.opacity(0.4), radius: 3)
-                .padding(8)
-                .contentShape(Rectangle())
-                .onTapGesture { onToggle() }
+            ZStack {
+                Circle()
+                    .fill(isSelected ? Color.appDanger : Color.black.opacity(0.35))
+                    .frame(width: 26, height: 26)
+                Image(systemName: isSelected ? "checkmark" : "plus")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .padding(7)
+            .contentShape(Rectangle())
+            .onTapGesture { onToggle() }
         }
         .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
         .onAppear { loadThumb() }
