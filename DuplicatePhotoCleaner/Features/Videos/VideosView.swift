@@ -5,15 +5,14 @@ struct VideosView: View {
     let videos: [PHAsset]
     var onVideosChanged: (([PHAsset]) -> Void)?
     @Environment(AppState.self) private var appState
-    @State private var selectedVideoID: String?
+    @State private var selectedForDeletion: Set<String> = []
     @State private var showDeleteConfirmation = false
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var previewAsset: PHAsset?
 
-    private var selectedAsset: PHAsset? {
-        guard let id = selectedVideoID else { return nil }
-        return videos.first { $0.localIdentifier == id }
+    private var selectedAssets: [PHAsset] {
+        videos.filter { selectedForDeletion.contains($0.localIdentifier) }
     }
 
     var body: some View {
@@ -22,13 +21,13 @@ struct VideosView: View {
                 ForEach(videos, id: \.localIdentifier) { asset in
                     VideoRow(
                         asset: asset,
-                        isSelected: selectedVideoID == asset.localIdentifier,
+                        isSelected: selectedForDeletion.contains(asset.localIdentifier),
                         onTap: {
                             HapticManager.selection()
-                            if selectedVideoID == asset.localIdentifier {
-                                selectedVideoID = nil
+                            if selectedForDeletion.contains(asset.localIdentifier) {
+                                selectedForDeletion.remove(asset.localIdentifier)
                             } else {
-                                selectedVideoID = asset.localIdentifier
+                                selectedForDeletion.insert(asset.localIdentifier)
                             }
                         },
                         onPreview: { previewAsset = asset }
@@ -43,16 +42,34 @@ struct VideosView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.appBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                let allSelected = !videos.isEmpty && videos.allSatisfy { selectedForDeletion.contains($0.localIdentifier) }
+                Button {
+                    HapticManager.selection()
+                    if allSelected {
+                        selectedForDeletion.removeAll()
+                    } else {
+                        selectedForDeletion = Set(videos.map(\.localIdentifier))
+                    }
+                } label: {
+                    Text(allSelected ? "Deselect All" : "Select All")
+                        .font(.appCaptionMedium)
+                        .foregroundStyle(Color.appPrimary)
+                }
+            }
+        }
         .overlay(alignment: .bottom) {
-            if let asset = selectedAsset {
-                let bytes = asset.fileSizeBytes
+            if !selectedForDeletion.isEmpty {
+                let count = selectedForDeletion.count
+                let bytes = selectedAssets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
                 VStack(spacing: 0) {
                     Divider()
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Free up \(formatBytes(bytes))")
                                 .font(.appH3).foregroundStyle(Color.appTextPrimary)
-                            Text("1 video selected")
+                            Text("\(count) video\(count > 1 ? "s" : "") selected")
                                 .font(.appCaption).foregroundStyle(Color.appTextSecondary)
                         }
                         Spacer()
@@ -62,7 +79,7 @@ struct VideosView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "trash.fill").font(.system(size: 15, weight: .semibold))
-                                Text("Delete").font(.appBody)
+                                Text("Delete \(count)").font(.appBody)
                             }
                             .foregroundStyle(.white)
                             .padding(.horizontal, 24).padding(.vertical, 14)
@@ -85,7 +102,8 @@ struct VideosView: View {
         )) {
             if let asset = previewAsset {
                 VideoPreviewSheet(asset: asset) {
-                    selectedVideoID = asset.localIdentifier
+                    previewAsset = nil
+                    selectedForDeletion.insert(asset.localIdentifier)
                     if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
                     else { deleteSelected() }
                 }
@@ -106,17 +124,19 @@ struct VideosView: View {
     }
 
     private func deleteSelected() {
-        guard let asset = selectedAsset else { return }
-        let bytes = asset.fileSizeBytes
+        let assets = selectedAssets
+        let count = assets.count
+        let bytes = assets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
         Task {
-            try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets([asset] as NSArray) }
+            try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(assets as NSArray) }
             await MainActor.run {
                 HapticManager.notification(.success)
-                appState.recordCleanup(freedBytes: bytes, deletedCount: 1)
-                let updated = videos.filter { $0.localIdentifier != asset.localIdentifier }
-                selectedVideoID = nil
+                appState.recordCleanup(freedBytes: bytes, deletedCount: count)
+                let deletedIDs = selectedForDeletion
+                let updated = videos.filter { !deletedIDs.contains($0.localIdentifier) }
+                selectedForDeletion.removeAll()
                 onVideosChanged?(updated)
-                toastMessage = "Video deleted"
+                toastMessage = "\(count) video\(count > 1 ? "s" : "") deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
         }
