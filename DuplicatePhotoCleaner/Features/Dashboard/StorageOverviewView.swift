@@ -31,7 +31,7 @@ struct StorageOverviewView: View {
                     Divider().foregroundStyle(Color.appDividerLight)
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles").font(.system(size: 14)).foregroundStyle(Color.appSuccess)
-                        Text("\(deletedCount) photos cleaned  •  \(formatBytes(freedBytes)) freed")
+                        Text("\(deletedCount) files cleaned  •  \(formatBytes(freedBytes)) freed")
                             .font(.appCaption).foregroundStyle(Color.appTextSecondary)
                     }
                 }
