@@ -8,6 +8,7 @@ struct VideosView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedForDeletion: Set<String> = []
     @State private var showDeleteConfirmation = false
+    @State private var showingPaywall = false
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var previewAsset: PHAsset?
@@ -48,10 +49,12 @@ struct VideosView: View {
                 let allSelected = !videos.isEmpty && videos.allSatisfy { selectedForDeletion.contains($0.localIdentifier) }
                 Button {
                     HapticManager.selection()
-                    if allSelected {
-                        selectedForDeletion.removeAll()
-                    } else {
-                        selectedForDeletion = Set(videos.map(\.localIdentifier))
+                    Task { @MainActor in
+                        if allSelected {
+                            selectedForDeletion.removeAll()
+                        } else {
+                            selectedForDeletion = Set(videos.map(\.localIdentifier))
+                        }
                     }
                 } label: {
                     Text(allSelected ? "Deselect All" : "Select All")
@@ -61,41 +64,55 @@ struct VideosView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if !selectedForDeletion.isEmpty {
-                let count = selectedForDeletion.count
-                let bytes = selectedAssets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
-                VStack(spacing: 0) {
-                    Divider()
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 3) {
+            let count = selectedForDeletion.count
+            let bytes = selectedAssets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
+            VStack(spacing: 0) {
+                Divider()
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        if count > 0 {
                             Text("Free up \(formatBytes(bytes))")
                                 .font(.appH3).foregroundStyle(Color.appTextPrimary)
                             Text("\(count) video\(count > 1 ? "s" : "") selected")
                                 .font(.appCaption).foregroundStyle(Color.appTextSecondary)
+                        } else {
+                            Text("No items selected")
+                                .font(.appCaption).foregroundStyle(Color.appTextTertiary)
                         }
-                        Spacer()
-                        Button {
-                            if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
-                            else { deleteSelected() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "trash.fill").font(.system(size: 15, weight: .semibold))
-                                Text("Delete \(count)").font(.appBody)
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 24).padding(.vertical, 14)
-                            .background(Capsule().fill(Color.appDanger))
-                        }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 20).padding(.vertical, 18)
-                    .background(Color.appBackground)
+                    Spacer()
+                    Button {
+                        if !appState.isPurchased { showingPaywall = true }
+                        else if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
+                        else { deleteSelected() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash.fill").font(.system(size: 15, weight: .semibold))
+                            Text(count > 0 ? "Delete \(count)" : "Delete").font(.appBody)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 24).padding(.vertical, 14)
+                        .background(Capsule().fill(Color.appDanger))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(count == 0)
+                    .opacity(count == 0 ? 0.5 : 1.0)
                 }
+                .padding(.horizontal, 20).padding(.vertical, 18)
+                .background(Color.appBackground)
             }
         }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeletePreferencePickerView { deleteSelected() }
                 .environment(appState)
+        }
+        .sheet(isPresented: $showingPaywall) {
+            let bytes = selectedAssets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
+            PaywallDeleteSheet(selectedSizeBytes: bytes, selectedCount: selectedForDeletion.count, contentType: "videos") {
+                showingPaywall = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { deleteSelected() }
+            }
+            .environment(appState)
         }
         .sheet(isPresented: Binding(
             get: { previewAsset != nil },
@@ -134,7 +151,7 @@ struct VideosView: View {
                 let deletedIDs = selectedForDeletion
                 let updated = videos.filter { !deletedIDs.contains($0.localIdentifier) }
                 selectedForDeletion.removeAll()
-                onVideosChanged?(updated)
+                withAnimation { onVideosChanged?(updated) }
                 toastMessage = "\(count) video\(count > 1 ? "s" : "") deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
@@ -149,7 +166,7 @@ struct VideosView: View {
                 HapticManager.notification(.success)
                 appState.recordCleanup(freedBytes: bytes, deletedCount: 1)
                 let updated = videos.filter { $0.localIdentifier != asset.localIdentifier }
-                onVideosChanged?(updated)
+                withAnimation { onVideosChanged?(updated) }
                 toastMessage = "Video deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
@@ -219,11 +236,13 @@ private struct VideoRow: View {
                 // Selection badge
                 ZStack {
                     Circle()
-                        .fill(isSelected ? Color.appDanger : Color.appBackgroundTertiary)
-                        .frame(width: 26, height: 26)
-                    Image(systemName: isSelected ? "checkmark" : "")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
+                        .fill(isSelected ? Color.appDanger : Color.white)
+                        .frame(width: 24, height: 24)
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { onTap() }
@@ -240,7 +259,9 @@ private struct VideoRow: View {
         PHImageManager.default().requestImage(
             for: asset, targetSize: CGSize(width: 200, height: 200),
             contentMode: .aspectFill, options: opts
-        ) { img, _ in if let img { self.thumbnail = img } }
+        ) { img, _ in
+            if let img { DispatchQueue.main.async { self.thumbnail = img } }
+        }
     }
 }
 
@@ -253,45 +274,50 @@ private struct VideoPreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var thumbnail: UIImage?
     @State private var showDeleteConfirmation = false
+    @State private var showingPaywall = false
     @State private var player: AVPlayer?
-    @State private var showPlayer = false
+    @State private var isLoadingVideo = false
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("Video")
+            Text("Videos")
                 .font(.appH3)
                 .foregroundStyle(Color.appTextPrimary)
                 .padding(.top, 20)
                 .padding(.bottom, 16)
 
-            // Thumbnail with play button
+            // Video player inline in the sheet
             ZStack {
+                // Thumbnail as backdrop while loading
                 if let thumbnail {
                     Image(uiImage: thumbnail)
-                        .resizable().aspectRatio(contentMode: .fill)
-                        .frame(height: 360).clipped()
+                        .resizable().aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Color.appBackgroundSecondary
-                        .frame(height: 360)
-                        .overlay(ProgressView())
                 }
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .shadow(color: .black.opacity(0.3), radius: 8)
-            }
-            .frame(height: 360)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
-            .padding(.horizontal, 24)
-            .onTapGesture { playVideo() }
-            .fullScreenCover(isPresented: $showPlayer) {
+
+                // Inline video player
                 if let player {
                     VideoPlayer(player: player)
-                        .ignoresSafeArea()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .onAppear { player.play() }
                         .onDisappear { player.pause() }
                 }
+
+                // Loading indicator while fetching video
+                if isLoadingVideo {
+                    ProgressView()
+                        .scaleEffect(1.2)
+                        .tint(.white)
+                }
             }
+            .frame(height: 360)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
+            .padding(.horizontal, 24)
 
             // Info
             VStack(spacing: 10) {
@@ -307,7 +333,8 @@ private struct VideoPreviewSheet: View {
                         value: asset.creationDateFormatted, color: Color.appCamel)
 
                 Button {
-                    if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
+                    if !appState.isPurchased { showingPaywall = true }
+                    else if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
                     else { onDelete?(); dismiss() }
                 } label: {
                     HStack(spacing: 6) {
@@ -337,7 +364,14 @@ private struct VideoPreviewSheet: View {
             DeletePreferencePickerView { onDelete?(); dismiss() }
                 .environment(appState)
         }
-        .onAppear { loadThumbnail() }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallDeleteSheet(selectedSizeBytes: asset.fileSizeBytes, selectedCount: 1, contentType: "videos") {
+                showingPaywall = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { onDelete?(); dismiss() }
+            }
+            .environment(appState)
+        }
+        .onAppear { loadThumbnail(); loadVideo() }
     }
 
     private func loadThumbnail() {
@@ -355,16 +389,31 @@ private struct VideoPreviewSheet: View {
         }
     }
 
-    private func playVideo() {
+    private func loadVideo() {
+        guard player == nil else { return }
+        isLoadingVideo = true
         let opts = PHVideoRequestOptions()
         opts.isNetworkAccessAllowed = true
         opts.deliveryMode = .automatic
-        PHImageManager.default().requestAVAsset(forVideo: asset, options: opts) { avAsset, _, _ in
-            guard let avAsset else { return }
+        var didComplete = false
+        let requestID = PHImageManager.default().requestAVAsset(forVideo: asset, options: opts) { avAsset, _, _ in
+            guard !didComplete else { return }
+            didComplete = true
+            guard let avAsset else {
+                DispatchQueue.main.async { self.isLoadingVideo = false }
+                return
+            }
             DispatchQueue.main.async {
                 self.player = AVPlayer(playerItem: AVPlayerItem(asset: avAsset))
-                self.showPlayer = true
+                self.isLoadingVideo = false
             }
+        }
+        // Timeout after 15s — iCloud downloads can hang indefinitely
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            guard !didComplete else { return }
+            didComplete = true
+            PHImageManager.default().cancelImageRequest(requestID)
+            self.isLoadingVideo = false
         }
     }
 

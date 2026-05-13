@@ -7,9 +7,11 @@ struct BlurryPhotosView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedForDeletion: Set<String> = []
     @State private var showDeleteConfirmation = false
+    @State private var showingPaywall = false
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var blurThreshold: BlurDetector.BlurLevel = .blurry
+    @State private var previewContext: PhotoPreviewContext?
 
     private var filteredPhotos: [PhotoQuality] { photos.filter { $0.blurScore < blurThreshold.threshold } }
 
@@ -35,11 +37,18 @@ struct BlurryPhotosView: View {
                 Text("\(filteredPhotos.count) BLURRY PHOTOS").sectionHeaderStyle()
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)], spacing: 4) {
                     ForEach(filteredPhotos, id: \.asset.localIdentifier) { photo in
-                        BlurryCell(photo: photo, isSelected: selectedForDeletion.contains(photo.asset.localIdentifier)) {
+                        BlurryCell(photo: photo, isSelected: selectedForDeletion.contains(photo.asset.localIdentifier),
+                                   onToggle: {
                             HapticManager.selection()
                             if selectedForDeletion.contains(photo.asset.localIdentifier) { selectedForDeletion.remove(photo.asset.localIdentifier) }
                             else { selectedForDeletion.insert(photo.asset.localIdentifier) }
-                        }
+                        }, onPreview: {
+                            let assets = filteredPhotos.map { $0.asset }
+                            if let idx = assets.firstIndex(where: { $0.localIdentifier == photo.asset.localIdentifier }) {
+                                previewContext = PhotoPreviewContext(assets: assets, initialIndex: idx, category: .blurry,
+                                                                    reason: String(format: "Blur score: %.0f", photo.blurScore))
+                            }
+                        })
                     }
                 }
                 .padding(.horizontal, Layout.pageHorizontalPadding)
@@ -49,27 +58,59 @@ struct BlurryPhotosView: View {
         .background(Color.appBackground)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Select All") { selectedForDeletion = Set(filteredPhotos.map { $0.asset.localIdentifier }) }
-                    .font(.appCaptionMedium).foregroundStyle(Color.appPrimary)
+                let allIDs = filteredPhotos.map { $0.asset.localIdentifier }
+                let allSelected = !allIDs.isEmpty && allIDs.allSatisfy { selectedForDeletion.contains($0) }
+                Button {
+                    HapticManager.selection()
+                    Task { @MainActor in
+                        if allSelected {
+                            selectedForDeletion.removeAll()
+                        } else {
+                            selectedForDeletion = Set(allIDs)
+                        }
+                    }
+                } label: {
+                    Text(allSelected ? "Deselect All" : "Select All")
+                        .font(.appCaptionMedium)
+                        .foregroundStyle(Color.appPrimary)
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color.appBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .overlay(alignment: .bottom) {
-            if !selectedForDeletion.isEmpty {
-                let count = selectedForDeletion.count
-                PrimaryButton(title: "Delete \(count) Photo\(count > 1 ? "s" : "")", icon: "trash", isDanger: true) {
-                    if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
-                    else { deletePhotos() }
-                }
-                .padding(.horizontal, Layout.pageHorizontalPadding).padding(.bottom, 32)
-                .background(Rectangle().fill(Color.appBackground).shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -4))
+            let count = selectedForDeletion.count
+            PrimaryButton(title: count > 0 ? "Delete \(count) Photo\(count > 1 ? "s" : "")" : "Delete",
+                          icon: "trash", isDanger: true, isDisabled: count == 0) {
+                if !appState.isPurchased { showingPaywall = true }
+                else if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
+                else { deletePhotos() }
             }
+            .padding(.horizontal, Layout.pageHorizontalPadding).padding(.bottom, 32)
+            .background(Rectangle().fill(Color.appBackground).shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: -4))
         }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeletePreferencePickerView { deletePhotos() }
                 .environment(appState)
+        }
+        .sheet(isPresented: $showingPaywall) {
+            let selected = filteredPhotos.filter { selectedForDeletion.contains($0.asset.localIdentifier) }
+            let bytes = selected.reduce(Int64(0)) { $0 + $1.fileSize }
+            PaywallDeleteSheet(selectedSizeBytes: bytes, selectedCount: selected.count, contentType: "photos") {
+                showingPaywall = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { deletePhotos() }
+            }
+            .environment(appState)
+        }
+        .sheet(item: $previewContext) { ctx in
+            FloatingPhotoPreview(assets: ctx.assets, initialIndex: ctx.initialIndex, category: ctx.category, reason: ctx.reason) { deleted in
+                withAnimation {
+                    let updated = photos.filter { $0.asset.localIdentifier != deleted.localIdentifier }
+                    onPhotosChanged?(updated)
+                }
+            }
+            .environment(appState)
         }
         .overlay(alignment: .top) {
             if showToast {
@@ -95,7 +136,7 @@ struct BlurryPhotosView: View {
                 appState.recordCleanup(freedBytes: bytes, deletedCount: count)
                 let updated = photos.filter { !selectedForDeletion.contains($0.asset.localIdentifier) }
                 selectedForDeletion.removeAll()
-                onPhotosChanged?(updated)
+                withAnimation { onPhotosChanged?(updated) }
                 toastMessage = "\(count) photo\(count > 1 ? "s" : "") deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
@@ -104,12 +145,13 @@ struct BlurryPhotosView: View {
 }
 
 private struct BlurryCell: View {
-    let photo: PhotoQuality; let isSelected: Bool; let onTap: () -> Void
+    let photo: PhotoQuality; let isSelected: Bool; let onToggle: () -> Void; let onPreview: () -> Void
     @State private var thumbnail: UIImage?
     var body: some View {
         ZStack(alignment: .topTrailing) {
             if let thumbnail {
                 Image(uiImage: thumbnail).resizable().aspectRatio(1, contentMode: .fill).clipped()
+                    .onTapGesture { onPreview() }
             } else {
                 Rectangle().fill(Color.appBackgroundTertiary).aspectRatio(1, contentMode: .fill)
                     .onAppear { loadThumbnail() }
@@ -124,21 +166,25 @@ private struct BlurryCell: View {
             // Selection badge
             ZStack {
                 Circle()
-                    .fill(isSelected ? Color.appDanger : Color.black.opacity(0.35))
-                    .frame(width: 22, height: 22)
-                Image(systemName: isSelected ? "checkmark" : "plus")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
+                    .fill(isSelected ? Color.appDanger : Color.white)
+                    .frame(width: 24, height: 24)
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
-            .padding(5)
+            .padding(6)
             .contentShape(Rectangle())
-            .onTapGesture(perform: onTap)
+            .onTapGesture(perform: onToggle)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
     private func loadThumbnail() {
         let opts = PHImageRequestOptions(); opts.deliveryMode = .opportunistic; opts.isNetworkAccessAllowed = false
         PHImageManager.default().requestImage(for: photo.asset, targetSize: CGSize(width: 200, height: 200),
-            contentMode: .aspectFill, options: opts) { img, _ in if let img { self.thumbnail = img } }
+            contentMode: .aspectFill, options: opts) { img, _ in
+            if let img { DispatchQueue.main.async { self.thumbnail = img } }
+        }
     }
 }

@@ -9,7 +9,7 @@ enum PhotoPermissionStatus {
 class PhotoPermissionManager {
     var status: PhotoPermissionStatus = .notDetermined
 
-    init() { checkCurrentStatus() }
+    init() {}
 
     func checkCurrentStatus() {
         let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)

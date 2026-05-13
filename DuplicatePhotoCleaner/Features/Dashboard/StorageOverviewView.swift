@@ -3,8 +3,10 @@ import SwiftUI
 struct StorageOverviewView: View {
     let usedGB: Double
     let totalGB: Double
-    let freedBytes: Int64
-    let deletedCount: Int
+    @Environment(AppState.self) private var appState
+
+    private var freedBytes: Int64 { appState.cumulativeFreedBytes }
+    private var deletedCount: Int { appState.cumulativeDeletedCount }
 
     private var availableGB: Double { totalGB - usedGB }
     private var usedPercent: Double { usedGB / totalGB }

@@ -3,10 +3,16 @@ import StoreKit
 
 struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
     @State private var storeKit = StoreKitManager()
-    @State private var selectedProduct: Product?
     @State private var isPurchasing = false
     @State private var purchaseError: String?
+    @State private var showingRestoreSuccess = false
+    @State private var showingPrivacy = false
+    @State private var showingTerms = false
+
+    /// Optional callback — fires after successful purchase (used by delete-triggered paywall)
+    var onPurchaseSuccess: (() -> Void)?
 
     var body: some View {
         ScrollView {
@@ -27,64 +33,95 @@ struct PaywallView: View {
                         Image(systemName: "sparkles").font(.system(size: 36, weight: .light)).foregroundStyle(Color.appPrimary)
                     }
                     Text("Unlock Full Cleanup").font(.appH1).foregroundStyle(Color.appTextPrimary)
-                    Text("Delete duplicates, similar photos, blurry shots and screenshots to free up space.")
+                    Text("One-time purchase to permanently unlock all cleanup features.")
                         .font(.appBodyRegular).foregroundStyle(Color.appTextSecondary)
                         .multilineTextAlignment(.center).padding(.horizontal, 32)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    BenefitRow(icon: "checkmark.circle.fill", text: "Unlimited scans and cleanup")
+                    BenefitRow(icon: "checkmark.circle.fill", text: "One-time purchase, use forever")
                     BenefitRow(icon: "checkmark.circle.fill", text: "All detection features unlocked")
                     BenefitRow(icon: "checkmark.circle.fill", text: "Smart AI-powered recommendations")
                     BenefitRow(icon: "checkmark.circle.fill", text: "Future updates included")
                 }
                 .padding(.horizontal, Layout.pageHorizontalPadding)
 
-                VStack(spacing: 12) {
-                    if let lifetime = storeKit.lifetimeProduct {
-                        PricingCard(product: lifetime, badge: "Best Value", badgeColor: .appSuccess,
-                                    isSelected: selectedProduct?.id == lifetime.id || selectedProduct == nil)
-                        { selectedProduct = lifetime }
-                    }
-                    if let yearly = storeKit.yearlyProduct {
-                        PricingCard(product: yearly, badge: nil, badgeColor: .clear,
-                                    isSelected: selectedProduct?.id == yearly.id)
-                        { selectedProduct = yearly }
-                    }
+                if let product = storeKit.lifetimeProduct {
+                    PrimaryButton(
+                        title: isPurchasing ? "Processing..." : "Unlock Lifetime — \(product.displayPrice)",
+                        isDisabled: isPurchasing
+                    ) { purchase(product) }
+                    .padding(.horizontal, Layout.pageHorizontalPadding)
+                } else if storeKit.isLoading {
+                    PrimaryButton(title: "Loading...", isDisabled: true) {}
+                        .padding(.horizontal, Layout.pageHorizontalPadding)
+                } else {
+                    PrimaryButton(title: "Unable to load products", isDisabled: true) {}
+                        .padding(.horizontal, Layout.pageHorizontalPadding)
                 }
-                .padding(.horizontal, Layout.pageHorizontalPadding)
-
-                PrimaryButton(title: isPurchasing ? "Processing..." : "Continue",
-                              isDisabled: isPurchasing || selectedProduct == nil && storeKit.lifetimeProduct == nil)
-                { purchase() }
-                .padding(.horizontal, Layout.pageHorizontalPadding)
 
                 if let error = purchaseError {
                     Text(error).font(.appCaption).foregroundStyle(Color.appDanger)
                 }
 
-                HStack(spacing: 16) {
-                    Button("Restore Purchase") { Task { await storeKit.restorePurchases() } }
+                VStack(spacing: 12) {
+                    Button("Restore Purchase") { restorePurchases() }
                         .font(.appCaption).foregroundStyle(Color.appTextSecondary)
+
+                    HStack(spacing: 16) {
+                        Button("Terms of Use") { showingTerms = true }
+                        Text("·").foregroundStyle(Color.appTextQuaternary)
+                        Button("Privacy Policy") { showingPrivacy = true }
+                    }
+                    .font(.appTiny).foregroundStyle(Color.appTextTertiary)
                 }
                 .padding(.bottom, 40)
             }
         }
         .background(Color.appBackground)
+        .interactiveDismissDisabled(isPurchasing)
         .task {
             await storeKit.loadProducts()
-            selectedProduct = storeKit.lifetimeProduct
+        }
+        .alert("Restore Successful", isPresented: $showingRestoreSuccess) {
+            Button("OK") { dismiss() }
+        } message: {
+            Text("Your purchase has been restored.")
+        }
+        .sheet(isPresented: $showingPrivacy) {
+            LegalDocumentView(type: .privacyPolicy)
+        }
+        .sheet(isPresented: $showingTerms) {
+            LegalDocumentView(type: .termsOfUse)
         }
     }
 
-    private func purchase() {
-        guard let product = selectedProduct else { return }
+    private func purchase(_ product: Product) {
         isPurchasing = true; purchaseError = nil
         Task {
             let success = await storeKit.purchase(product)
             isPurchasing = false
-            if success { dismiss() }
-            else { purchaseError = "Purchase was not completed. Please try again." }
+            if success {
+                appState.purchasedProductIDs = storeKit.purchasedProductIDs
+                onPurchaseSuccess?()
+                dismiss()
+            } else {
+                purchaseError = "Purchase was not completed. Please try again."
+            }
+        }
+    }
+
+    private func restorePurchases() {
+        isPurchasing = true; purchaseError = nil
+        Task {
+            await storeKit.restorePurchases()
+            isPurchasing = false
+            appState.purchasedProductIDs = storeKit.purchasedProductIDs
+            if appState.isPurchased {
+                showingRestoreSuccess = true
+            } else {
+                purchaseError = "No previous purchases found."
+            }
         }
     }
 }
@@ -97,41 +134,5 @@ private struct BenefitRow: View {
             Text(text).font(.appBodyRegular).foregroundStyle(Color.appTextPrimary)
             Spacer()
         }
-    }
-}
-
-private struct PricingCard: View {
-    let product: Product; let badge: String?; let badgeColor: Color
-    let isSelected: Bool; let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle().stroke(isSelected ? Color.appPrimary : Color.appTextQuaternary, lineWidth: 2).frame(width: 24, height: 24)
-                    if isSelected { Circle().fill(Color.appPrimary).frame(width: 14, height: 14) }
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(product.displayName).font(.appBody).foregroundStyle(Color.appTextPrimary)
-                        if let badge {
-                            Text(badge).font(.appMicro).foregroundStyle(.white)
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Capsule().fill(badgeColor))
-                        }
-                    }
-                    Text(product.description).font(.appCaption).foregroundStyle(Color.appTextSecondary)
-                }
-                Spacer()
-                Text(product.displayPrice).font(.appPrice).foregroundStyle(Color.appPrimary)
-            }
-            .padding(16)
-            .background(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
-                .stroke(isSelected ? Color.appPrimary.opacity(0.3) : Color.appDivider.opacity(0.5),
-                        lineWidth: isSelected ? 1.5 : 0.5)
-                .fill(Color.appSurface))
-            .appleCardShadow()
-        }
-        .buttonStyle(.plain)
     }
 }

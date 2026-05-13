@@ -27,16 +27,17 @@ struct DashboardView: View {
 
     // Scan results (reference type — detail views see updates immediately)
     @State private var scanData = ScanResultData()
+    // Incremented after each data change to force navigation destination re-creation
+    @State private var stateVersion = 0
 
     // Navigation
     @State private var showResults = false
     @State private var navigateCategory: ScanCategory?
 
-    // Auto-scan
-    @State private var lastFullScanAt: Date? = {
-        let ts = UserDefaults.standard.double(forKey: "lastFullScanAt")
-        return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
-    }()
+    // Purchase sync
+    @State private var storeKit = StoreKitManager()
+    @State private var showingPaywall = false
+
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: Layout.cardSpacing),
@@ -47,8 +48,8 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Layout.cardSpacing) {
-                    StorageOverviewView(usedGB: storageInfo.used, totalGB: storageInfo.total,
-                                        freedBytes: appState.cumulativeFreedBytes, deletedCount: appState.cumulativeDeletedCount)
+                    StorageOverviewView(usedGB: storageInfo.used, totalGB: storageInfo.total)
+                        .environment(appState)
 
                     LazyVGrid(columns: gridColumns, spacing: Layout.cardSpacing) {
                         ScanCategoryTile(
@@ -82,6 +83,19 @@ struct DashboardView: View {
                         )
                         .gridCellColumns(2)
                     }
+                    if !appState.isPurchased {
+                        Button { showingPaywall = true } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "crown.fill")
+                                    .font(.system(size: 12))
+                                Text("Upgrade to Premium")
+                                    .font(.appSmall)
+                            }
+                            .foregroundStyle(Color.appPrimary)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 8)
+                    }
                 }
                 .padding(.horizontal, Layout.pageHorizontalPadding)
                 .padding(.top, Layout.headerToContent)
@@ -97,14 +111,19 @@ struct DashboardView: View {
             }
             .toolbarBackground(Color.appBackground, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .sheet(isPresented: $showingSettings) { SettingsView() }
+            .sheet(isPresented: $showingSettings) { SettingsView().environment(appState) }
+            .sheet(isPresented: $showingPaywall) { PaywallView().environment(appState) }
             .navigationDestination(item: $navigateCategory) { category in
                 categoryDetailView(for: category)
             }
         }
         .onAppear {
             loadStorageInfo()
-            autoScanIfNeeded()
+        }
+        .task {
+            await storeKit.updatePurchasedProducts()
+            appState.purchasedProductIDs = storeKit.purchasedProductIDs
+            await storeKit.startTransactionListener()
         }
         .alert("Photo Access Required", isPresented: $showPermissionAlert) {
             Button("Open Settings") {
@@ -118,30 +137,50 @@ struct DashboardView: View {
     private func categoryDetailView(for category: ScanCategory) -> some View {
         switch category {
         case .duplicates:
-            DuplicateGroupsView(groups: scanData.duplicateGroups) {
-                scanData.duplicateGroups = $0
-                dupState.update(fromDuplicateGroups: $0)
+            DuplicateGroupsView(groups: scanData.duplicateGroups) { updated in
+                withAnimation {
+                    scanData.duplicateGroups = updated
+                    stateVersion += 1
+                }
+                dupState.update(fromDuplicateGroups: updated)
             }
+            .id(stateVersion)
         case .similar:
-            SimilarGroupsView(groups: scanData.similarGroups) {
-                scanData.similarGroups = $0
-                simState.update(fromSimilarGroups: $0)
+            SimilarGroupsView(groups: scanData.similarGroups) { updated in
+                withAnimation {
+                    scanData.similarGroups = updated
+                    stateVersion += 1
+                }
+                simState.update(fromSimilarGroups: updated)
             }
+            .id(stateVersion)
         case .blurry:
-            BlurryPhotosView(photos: scanData.blurryPhotos) {
-                scanData.blurryPhotos = $0
-                blurState.update(fromBlurryPhotos: $0)
+            BlurryPhotosView(photos: scanData.blurryPhotos) { updated in
+                withAnimation {
+                    scanData.blurryPhotos = updated
+                    stateVersion += 1
+                }
+                blurState.update(fromBlurryPhotos: updated)
             }
+            .id(stateVersion)
         case .screenshots:
-            ScreenshotsView(groups: scanData.screenshotGroups) {
-                scanData.screenshotGroups = $0
-                ssState.update(fromScreenshotGroups: $0)
+            ScreenshotsView(groups: scanData.screenshotGroups) { updated in
+                withAnimation {
+                    scanData.screenshotGroups = updated
+                    stateVersion += 1
+                }
+                ssState.update(fromScreenshotGroups: updated)
             }
+            .id(stateVersion)
         case .videos:
-            VideosView(videos: scanData.videos) {
-                scanData.videos = $0
-                vidState.update(fromVideos: $0)
+            VideosView(videos: scanData.videos) { updated in
+                withAnimation {
+                    scanData.videos = updated
+                    stateVersion += 1
+                }
+                vidState.update(fromVideos: updated)
             }
+            .id(stateVersion)
         }
     }
 
@@ -182,27 +221,6 @@ struct DashboardView: View {
 
             await performScan(category)
             navigateCategory = category
-        }
-    }
-
-    private func autoScanIfNeeded() {
-        // Skip if any scan is in progress
-        guard !dupState.isScanning, !simState.isScanning, !blurState.isScanning, !ssState.isScanning, !vidState.isScanning else { return }
-
-        // Skip only if all scans already completed AND within cooldown
-        let allDone = dupState.isDone && simState.isDone && blurState.isDone && ssState.isDone && vidState.isDone
-        if allDone, let last = lastFullScanAt, Date().timeIntervalSince(last) < 300 { return }
-
-        Task {
-            let status = await permissionManager.requestPermission()
-            guard status == .authorized || status == .limited else { return }
-
-            for category in ScanCategory.allCases {
-                await performScan(category)
-            }
-
-            lastFullScanAt = Date()
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastFullScanAt")
         }
     }
 

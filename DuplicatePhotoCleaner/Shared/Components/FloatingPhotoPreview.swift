@@ -1,14 +1,23 @@
 import SwiftUI
 import Photos
+import AVKit
 
 enum PhotoPreviewCategory {
     case best
     case others
+    case videos
+    case screenshots
+    case blurry
+    case similar
 
     var title: String {
         switch self {
         case .best: return "Best Photo"
         case .others: return "Other Copies"
+        case .videos: return "Videos"
+        case .screenshots: return "Screenshots"
+        case .blurry: return "Blurry Photos"
+        case .similar: return "Similar Photos"
         }
     }
 }
@@ -33,7 +42,14 @@ struct FloatingPhotoPreview: View {
     @State private var currentIndex: Int
     @State private var initialImage: UIImage?
     @State private var showDeleteConfirmation = false
+    @State private var showingPaywall = false
     @State private var showDeletedToast = false
+    @State private var avPlayer: AVPlayer?
+    @State private var showPlayer = false
+
+    private var isVideo: Bool {
+        currentIndex < assets.count && assets[currentIndex].mediaType == .video
+    }
 
     init(assets: [PHAsset], initialIndex: Int = 0, category: PhotoPreviewCategory = .others, reason: String = "", onDelete: ((PHAsset) -> Void)? = nil) {
         self.assets = assets
@@ -46,25 +62,36 @@ struct FloatingPhotoPreview: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Top spacer — centers title between sheet top and image
+            Spacer(minLength: 20)
+
             // Title
             Text(category.title)
                 .font(.appH3)
                 .foregroundStyle(Color.appTextPrimary)
-                .padding(.top, 20)
-                .padding(.bottom, 16)
 
-            // Swipeable images
+            // Bottom spacer — equal to top spacer, centers title
+            Spacer(minLength: 20)
+
+            // Swipeable images / videos
             TabView(selection: $currentIndex) {
                 ForEach(Array(assets.enumerated()), id: \.element.localIdentifier) { index, asset in
-                    PhotoSheetImage(
-                        asset: asset,
-                        preloadImage: index == initialIndex ? initialImage : nil
-                    )
+                    ZStack {
+                        if asset.mediaType == .video {
+                            VideoThumbnail(asset: asset)
+                                .onTapGesture { playVideo(asset) }
+                        } else {
+                            PhotoSheetImage(
+                                asset: asset,
+                                preloadImage: index == initialIndex ? initialImage : nil
+                            )
+                        }
+                    }
                     .tag(index)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 360)
+            .frame(height: 300)
             .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
             .padding(.horizontal, 24)
 
@@ -101,15 +128,13 @@ struct FloatingPhotoPreview: View {
 
                     // Delete button
                     Button {
-                        if appState.deletePreference == .askEveryTime {
-                            showDeleteConfirmation = true
-                        } else {
-                            deleteCurrentPhoto()
-                        }
+                        if !appState.isPurchased { showingPaywall = true }
+                        else if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
+                        else { deleteCurrentPhoto() }
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "trash").font(.system(size: 14, weight: .medium))
-                            Text("Delete This Photo").font(.appSmallSemibold)
+                            Text(isVideo ? "Delete This Video" : "Delete This Photo").font(.appSmallSemibold)
                         }
                         .foregroundStyle(Color.appDanger)
                         .frame(maxWidth: .infinity)
@@ -128,12 +153,30 @@ struct FloatingPhotoPreview: View {
 
             Spacer(minLength: 16)
         }
+        .fullScreenCover(isPresented: $showPlayer) {
+            if let avPlayer {
+                VideoPlayer(player: avPlayer)
+                    .ignoresSafeArea()
+                    .onAppear { avPlayer.play() }
+                    .onDisappear { avPlayer.pause() }
+            }
+        }
         .background(Color.appBackground)
         .presentationDetents([.fraction(0.82), .large])
         .presentationDragIndicator(.hidden)
         .sheet(isPresented: $showDeleteConfirmation) {
             DeletePreferencePickerView { deleteCurrentPhoto() }
                 .environment(appState)
+        }
+        .sheet(isPresented: $showingPaywall) {
+            if currentIndex < assets.count {
+                let asset = assets[currentIndex]
+                PaywallDeleteSheet(selectedSizeBytes: asset.fileSizeBytes, selectedCount: 1, contentType: isVideo ? "videos" : "photos") {
+                    showingPaywall = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { deleteCurrentPhoto() }
+                }
+                .environment(appState)
+            }
         }
         .onAppear { preloadInitial() }
         .overlay(alignment: .top) {
@@ -167,6 +210,7 @@ struct FloatingPhotoPreview: View {
     private func preloadInitial() {
         guard initialIndex < assets.count, initialImage == nil else { return }
         let asset = assets[initialIndex]
+        guard asset.mediaType != .video else { return }
 
         // Stage 1: fast opportunistic thumbnail
         let opts = PHImageRequestOptions()
@@ -201,6 +245,27 @@ struct FloatingPhotoPreview: View {
             if let img, !isDegraded {
                 DispatchQueue.main.async { self.initialImage = img }
             }
+        }
+    }
+
+    private func playVideo(_ asset: PHAsset) {
+        let opts = PHVideoRequestOptions()
+        opts.deliveryMode = .automatic
+        opts.isNetworkAccessAllowed = true
+        var didComplete = false
+        let requestID = PHImageManager.default().requestAVAsset(forVideo: asset, options: opts) { avAsset, _, _ in
+            guard !didComplete else { return }
+            didComplete = true
+            guard let avAsset else { return }
+            DispatchQueue.main.async {
+                self.avPlayer = AVPlayer(playerItem: AVPlayerItem(asset: avAsset))
+                self.showPlayer = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            guard !didComplete else { return }
+            didComplete = true
+            PHImageManager.default().cancelImageRequest(requestID)
         }
     }
 }
@@ -278,6 +343,45 @@ private struct PhotoSheetImage: View {
             if let img {
                 DispatchQueue.main.async { self.image = img }
             }
+        }
+    }
+}
+
+// MARK: - Video Thumbnail
+
+private struct VideoThumbnail: View {
+    let asset: PHAsset
+    @State private var thumbnail: UIImage?
+
+    var body: some View {
+        ZStack {
+            if let thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable().aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                Color.appBackgroundSecondary
+                    .overlay(ProgressView())
+            }
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.white.opacity(0.9))
+                .shadow(color: .black.opacity(0.3), radius: 8)
+        }
+        .background(Color.appBackgroundSecondary)
+        .onAppear { loadThumbnail() }
+    }
+
+    private func loadThumbnail() {
+        let opts = PHImageRequestOptions()
+        opts.deliveryMode = .opportunistic
+        opts.isNetworkAccessAllowed = false
+        PHImageManager.default().requestImage(
+            for: asset, targetSize: CGSize(width: 800, height: 800),
+            contentMode: .aspectFill, options: opts
+        ) { img, _ in
+            if let img { DispatchQueue.main.async { self.thumbnail = img } }
         }
     }
 }

@@ -18,7 +18,11 @@ class AppState {
     var hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
         didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
     }
-    var currentScanResult: ScanResult?
+    var purchasedProductIDs: Set<String> = []
+
+    var isPurchased: Bool {
+        purchasedProductIDs.contains(StoreKitManager.lifetimeID)
+    }
 
     var deletePreference: DeletePreference {
         get {

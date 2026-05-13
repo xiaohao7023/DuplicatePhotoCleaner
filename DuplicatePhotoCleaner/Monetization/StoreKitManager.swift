@@ -1,6 +1,5 @@
 import StoreKit
 
-@MainActor
 @Observable
 class StoreKitManager {
     var products: [Product] = []
@@ -8,18 +7,15 @@ class StoreKitManager {
     var isLoading = false
 
     static let lifetimeID = "com.cleanupphone.lifetime"
-    static let yearlyID = "com.cleanupphone.yearly"
 
     func loadProducts() async {
         isLoading = true; defer { isLoading = false }
         do {
-            let loaded = try await withTimeout(seconds: 10) {
-                try await Product.products(for: [Self.lifetimeID, Self.yearlyID])
+            let loaded = try await withTimeout(seconds: 3) {
+                try await Product.products(for: [Self.lifetimeID])
             }
-            products = loaded.sorted { $0.price < $1.price }
-        } catch {
-            print("Failed to load products: \(error)")
-        }
+            products = loaded
+        } catch {}
     }
 
     func purchase(_ product: Product) async -> Bool {
@@ -36,7 +32,7 @@ class StoreKitManager {
             case .userCancelled, .pending: return false
             @unknown default: return false
             }
-        } catch { print("Purchase failed: \(error)"); return false }
+        } catch { return false }
     }
 
     func restorePurchases() async { await updatePurchasedProducts() }
@@ -44,21 +40,29 @@ class StoreKitManager {
     func updatePurchasedProducts() async {
         var purchased: Set<String> = []
         do {
-            try await withTimeout(seconds: 10) {
+            try await withTimeout(seconds: 3) {
                 for await result in Transaction.currentEntitlements {
                     if case .verified(let transaction) = result {
                         if transaction.revocationDate == nil { purchased.insert(transaction.productID) }
                     }
                 }
             }
-        } catch {
-            print("Failed to load entitlements: \(error)")
-        }
+        } catch {}
         purchasedProductIDs = purchased
     }
 
     var lifetimeProduct: Product? { products.first { $0.id == Self.lifetimeID } }
-    var yearlyProduct: Product? { products.first { $0.id == Self.yearlyID } }
+
+    func startTransactionListener() async {
+        for await result in Transaction.updates {
+            if case .verified(let transaction) = result {
+                await transaction.finish()
+                if transaction.productID == Self.lifetimeID {
+                    purchasedProductIDs.insert(transaction.productID)
+                }
+            }
+        }
+    }
 }
 
 private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {

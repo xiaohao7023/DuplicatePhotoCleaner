@@ -3,20 +3,38 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
-    @State private var showingPrivacy = false
-    @State private var showingContact = false
     @State private var showDeletePreference = false
+    @State private var showingPaywall = false
+    @State private var showingPrivacy = false
+    @State private var showingTerms = false
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    SettingsToggleRow(icon: "video.fill", iconColor: .appPrimary, title: "Include Videos",
-                                      isOn: Bindable(appState).includeVideos)
-                    SettingsToggleRow(icon: "icloud.fill", iconColor: .appTeal, title: "Include iCloud Photos",
-                                      isOn: Bindable(appState).includeICloud)
+                    if appState.isPurchased {
+                        HStack {
+                            Image(systemName: "crown.fill").font(.system(size: 15)).foregroundStyle(Color.appSuccess)
+                                .frame(width: 32, height: 32)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.appSuccess.opacity(0.1)))
+                            Text("Lifetime Member").font(.appBody).foregroundStyle(Color.appTextPrimary)
+                            Spacer()
+                            Text("Active").font(.appCaption).foregroundStyle(Color.appSuccess)
+                        }
+                    } else {
+                        Button { showingPaywall = true } label: {
+                            HStack {
+                                Image(systemName: "crown.fill").font(.system(size: 15)).foregroundStyle(Color.appPrimary)
+                                    .frame(width: 32, height: 32)
+                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.appPrimary.opacity(0.1)))
+                                Text("Upgrade to Premium").font(.appBody).foregroundStyle(Color.appPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.appTextQuaternary)
+                            }
+                        }.buttonStyle(.plain)
+                    }
                 } header: {
-                    Text("Scan Preferences").font(.appSmallSemibold).foregroundStyle(Color.appTextSecondary)
+                    Text("Membership").font(.appSmallSemibold).foregroundStyle(Color.appTextSecondary)
                         .textCase(.uppercase).tracking(0.6)
                 }
 
@@ -39,12 +57,18 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    SettingsNavRow(icon: "lock.shield.fill", iconColor: .appSuccess, title: "Privacy Policy")
-                    SettingsNavRow(icon: "envelope.fill", iconColor: .appPurple, title: "Contact Us")
+                    Button { showingPrivacy = true } label: {
+                        SettingsNavRow(icon: "lock.shield.fill", iconColor: .appSuccess, title: "Privacy Policy")
+                    }.buttonStyle(.plain)
+
+                    Button { showingTerms = true } label: {
+                        SettingsNavRow(icon: "doc.text.fill", iconColor: .appTeal, title: "Terms of Use")
+                    }.buttonStyle(.plain)
+
                     Button {
-                        if let url = URL(string: "https://apps.apple.com") { UIApplication.shared.open(url) }
+                        if let url = URL(string: "mailto:huangxiaohao7023@icloud.com") { UIApplication.shared.open(url) }
                     } label: {
-                        SettingsNavRow(icon: "star.fill", iconColor: .appAmber, title: "Rate This App")
+                        SettingsNavRow(icon: "envelope.fill", iconColor: .appPurple, title: "Contact Us")
                     }.buttonStyle(.plain)
 
                     HStack {
@@ -53,7 +77,8 @@ struct SettingsView: View {
                             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.appSlateBlue.opacity(0.1)))
                         Text("Version").font(.appBody).foregroundStyle(Color.appTextPrimary)
                         Spacer()
-                        Text("1.0.0").font(.appCaption).foregroundStyle(Color.appTextTertiary)
+                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
+                            .font(.appCaption).foregroundStyle(Color.appTextTertiary)
                     }
                 } header: {
                     Text("About").font(.appSmallSemibold).foregroundStyle(Color.appTextSecondary)
@@ -80,6 +105,15 @@ struct SettingsView: View {
             .sheet(isPresented: $showDeletePreference) {
                 DeletePreferencePickerView()
                     .environment(appState)
+            }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView().environment(appState)
+            }
+            .sheet(isPresented: $showingPrivacy) {
+                LegalDocumentView(type: .privacyPolicy)
+            }
+            .sheet(isPresented: $showingTerms) {
+                LegalDocumentView(type: .termsOfUse)
             }
         }
     }

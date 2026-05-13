@@ -7,6 +7,7 @@ struct DuplicateGroupsView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedForDeletion: Set<String> = []
     @State private var showDeleteConfirmation = false
+    @State private var showingPaywall = false
     @State private var showToast = false
     @State private var toastMessage = ""
     @State private var previewContext: PhotoPreviewContext?
@@ -68,6 +69,9 @@ struct DuplicateGroupsView: View {
                                 } else {
                                     reason = "Same quality, newer copy"
                                 }
+                            default:
+                                filtered = others
+                                reason = ""
                             }
                             previewContext = PhotoPreviewContext(assets: filtered, initialIndex: 0, category: category, reason: reason)
                         }
@@ -87,10 +91,12 @@ struct DuplicateGroupsView: View {
                 let allSelected = !allOtherIDs.isEmpty && allOtherIDs.allSatisfy { selectedForDeletion.contains($0) }
                 Button {
                     HapticManager.selection()
-                    if allSelected {
-                        selectedForDeletion.removeAll()
-                    } else {
-                        selectedForDeletion = Set(allOtherIDs)
+                    Task { @MainActor in
+                        if allSelected {
+                            selectedForDeletion.removeAll()
+                        } else {
+                            selectedForDeletion = Set(allOtherIDs)
+                        }
                     }
                 } label: {
                     Text(allSelected ? "Deselect All" : "Select All")
@@ -100,49 +106,65 @@ struct DuplicateGroupsView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if !selectedForDeletion.isEmpty {
-                let count = selectedForDeletion.count
-                let bytes = selectedAssets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
-                VStack(spacing: 0) {
-                    Divider()
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 3) {
+            let count = selectedForDeletion.count
+            let bytes = selectedAssets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
+            VStack(spacing: 0) {
+                Divider()
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        if count > 0 {
                             Text("Free up \(formatBytes(bytes))")
                                 .font(.appH3).foregroundStyle(Color.appTextPrimary)
                             Text("\(count) duplicate\(count > 1 ? "s" : "") selected")
                                 .font(.appCaption).foregroundStyle(Color.appTextSecondary)
+                        } else {
+                            Text("No items selected")
+                                .font(.appCaption).foregroundStyle(Color.appTextTertiary)
                         }
-                        Spacer()
-                        Button {
-                            if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
-                            else { deleteSelected() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "trash.fill").font(.system(size: 15, weight: .semibold))
-                                Text("Delete \(count)").font(.appBody)
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 24).padding(.vertical, 14)
-                            .background(Capsule().fill(Color.appDanger))
-                        }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 20).padding(.vertical, 18)
-                    .background(Color.appBackground)
+                    Spacer()
+                    Button {
+                        if !appState.isPurchased { showingPaywall = true }
+                        else if appState.deletePreference == .askEveryTime { showDeleteConfirmation = true }
+                        else { deleteSelected() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash.fill").font(.system(size: 15, weight: .semibold))
+                            Text(count > 0 ? "Delete \(count)" : "Delete").font(.appBody)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 24).padding(.vertical, 14)
+                        .background(Capsule().fill(Color.appDanger))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(count == 0)
+                    .opacity(count == 0 ? 0.5 : 1.0)
                 }
+                .padding(.horizontal, 20).padding(.vertical, 18)
+                .background(Color.appBackground)
             }
         }
         .sheet(isPresented: $showDeleteConfirmation) {
             DeletePreferencePickerView { deleteSelected() }
                 .environment(appState)
         }
+        .sheet(isPresented: $showingPaywall) {
+            let bytes = selectedAssets.reduce(Int64(0)) { $0 + $1.fileSizeBytes }
+            PaywallDeleteSheet(selectedSizeBytes: bytes, selectedCount: selectedForDeletion.count, contentType: "duplicates") {
+                showingPaywall = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { deleteSelected() }
+            }
+            .environment(appState)
+        }
         .sheet(item: $previewContext) { ctx in
             FloatingPhotoPreview(assets: ctx.assets, initialIndex: ctx.initialIndex, category: ctx.category, reason: ctx.reason) { deleted in
-                onGroupsChanged?(groups.compactMap { g -> DuplicateGroup? in
-                    let remaining = g.assets.filter { $0.localIdentifier != deleted.localIdentifier }
-                    guard remaining.count > 1 else { return nil }
-                    return DuplicateGroup(assets: remaining, recommended: remaining.contains(where: { $0.localIdentifier == g.recommended.localIdentifier }) ? g.recommended : remaining[0])
-                })
+                withAnimation {
+                    onGroupsChanged?(groups.compactMap { g -> DuplicateGroup? in
+                        let remaining = g.assets.filter { $0.localIdentifier != deleted.localIdentifier }
+                        guard remaining.count > 1 else { return nil }
+                        return DuplicateGroup(assets: remaining, recommended: remaining.contains(where: { $0.localIdentifier == g.recommended.localIdentifier }) ? g.recommended : remaining[0])
+                    })
+                }
             }
             .environment(appState)
         }
@@ -157,7 +179,7 @@ struct DuplicateGroupsView: View {
                     }
             }
         }
-        .onAppear {
+        .task {
             let othersIDs = groups.flatMap { group in
                 group.assets.filter { $0.localIdentifier != group.recommended.localIdentifier }.map(\.localIdentifier)
             }
@@ -181,7 +203,7 @@ struct DuplicateGroupsView: View {
                     return DuplicateGroup(assets: remaining, recommended: g.recommended)
                 }
                 selectedForDeletion.removeAll()
-                onGroupsChanged?(updated)
+                withAnimation { onGroupsChanged?(updated) }
                 toastMessage = "\(count) duplicate\(count > 1 ? "s" : "") deleted"
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
             }
@@ -274,7 +296,9 @@ private struct DupThumb: View {
     private func loadThumb() {
         let opts = PHImageRequestOptions(); opts.deliveryMode = .opportunistic; opts.isNetworkAccessAllowed = false
         PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 200, height: 200),
-            contentMode: .aspectFill, options: opts) { img, _ in if let img { self.image = img } }
+            contentMode: .aspectFill, options: opts) { img, _ in
+            if let img { DispatchQueue.main.async { self.image = img } }
+        }
     }
 }
 
@@ -301,13 +325,15 @@ private struct DupSelectableThumb: View {
             // Checkbox - tap to toggle selection
             ZStack {
                 Circle()
-                    .fill(isSelected ? Color.appDanger : Color.black.opacity(0.35))
-                    .frame(width: 26, height: 26)
-                Image(systemName: isSelected ? "checkmark" : "plus")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
+                    .fill(isSelected ? Color.appDanger : Color.white)
+                    .frame(width: 24, height: 24)
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
-            .padding(7)
+            .padding(6)
             .contentShape(Rectangle())
             .onTapGesture { onToggle() }
         }
@@ -318,6 +344,8 @@ private struct DupSelectableThumb: View {
     private func loadThumb() {
         let opts = PHImageRequestOptions(); opts.deliveryMode = .opportunistic; opts.isNetworkAccessAllowed = false
         PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 200, height: 200),
-            contentMode: .aspectFill, options: opts) { img, _ in if let img { self.image = img } }
+            contentMode: .aspectFill, options: opts) { img, _ in
+            if let img { DispatchQueue.main.async { self.image = img } }
+        }
     }
 }
