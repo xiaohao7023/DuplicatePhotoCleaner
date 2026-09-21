@@ -3,8 +3,8 @@ import UIKit
 import Photos
 
 struct FeatureExtractor: Sendable {
-    nonisolated static func extract(from asset: PHAsset) async -> VNFeaturePrintObservation? {
-        guard let image = await requestImage(for: asset) else { return nil }
+    nonisolated static func extract(from asset: PHAsset, targetDimension: CGFloat = 512) async -> VNFeaturePrintObservation? {
+        guard let image = await requestImage(for: asset, targetDimension: targetDimension) else { return nil }
         return extract(from: image)
     }
 
@@ -17,17 +17,19 @@ struct FeatureExtractor: Sendable {
         } catch { return nil }
     }
 
-    nonisolated private static func requestImage(for asset: PHAsset) async -> CGImage? {
+    nonisolated private static func requestImage(for asset: PHAsset, targetDimension: CGFloat) async -> CGImage? {
         await withCheckedContinuation { continuation in
             var didResume = false
             let lock = NSLock()
             let opts = PHImageRequestOptions()
-            opts.deliveryMode = .highQualityFormat
+            opts.deliveryMode = targetDimension < 512 ? .fastFormat : .highQualityFormat
             opts.isNetworkAccessAllowed = false
             opts.resizeMode = .fast
             PHImageManager.default().requestImage(
-                for: asset, targetSize: CGSize(width: 512, height: 512),
-                contentMode: .aspectFill, options: opts
+                for: asset, targetSize: CGSize(width: targetDimension, height: targetDimension),
+                // Preserve the entire frame. Cropping with aspectFill made
+                // visually different photos look similar when their centers matched.
+                contentMode: .aspectFit, options: opts
             ) { image, _ in
                 lock.lock()
                 guard !didResume else { lock.unlock(); return }

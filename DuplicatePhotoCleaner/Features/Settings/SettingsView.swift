@@ -4,7 +4,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
     @State private var showDeletePreference = false
-    @State private var showingPaywall = false
     @State private var showingPrivacy = false
     @State private var showingTerms = false
 
@@ -22,7 +21,15 @@ struct SettingsView: View {
                             Text("Active").font(.appCaption).foregroundStyle(Color.appSuccess)
                         }
                     } else {
-                        Button { showingPaywall = true } label: {
+                        Button {
+                            // 直接拉起终身买断购买
+                            Task {
+                                let ok = await StoreKitManager.shared.purchaseLifetimeDirect()
+                                if ok {
+                                    appState.purchasedProductIDs = StoreKitManager.shared.purchasedProductIDs
+                                }
+                            }
+                        } label: {
                             HStack {
                                 Image(systemName: "crown.fill").font(.system(size: 15)).foregroundStyle(Color.appPrimary)
                                     .frame(width: 32, height: 32)
@@ -95,6 +102,53 @@ struct SettingsView: View {
                         }
                     }.padding(.vertical, 4)
                 }
+
+                #if DEBUG
+                Section {
+                    Button {
+                        appState.hasCompletedOnboarding = false
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.uturn.backward.circle").font(.system(size: 15)).foregroundStyle(Color.appPrimary)
+                                .frame(width: 32, height: 32)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.appPrimary.opacity(0.1)))
+                            Text("Replay Onboarding").font(.appBody).foregroundStyle(Color.appTextPrimary)
+                            Spacer()
+                        }
+                    }.buttonStyle(.plain)
+
+                    Button {
+                        appState.resetFreeQuota()
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.counterclockwise").font(.system(size: 15)).foregroundStyle(Color.appTeal)
+                                .frame(width: 32, height: 32)
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.appTeal.opacity(0.1)))
+                            Text("Reset Free Quota").font(.appBody).foregroundStyle(Color.appTextPrimary)
+                            Spacer()
+                            Text("\(appState.freeDeletesUsedBytes / (1024*1024))MB / 100MB")
+                                .font(.appCaption).foregroundStyle(Color.appTextTertiary)
+                        }
+                    }.buttonStyle(.plain)
+
+                    if appState.isPurchased {
+                        Button {
+                            appState.resetPurchaseState()
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.crop.circle.badge.xmark").font(.system(size: 15)).foregroundStyle(Color.appDanger)
+                                    .frame(width: 32, height: 32)
+                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.appDanger.opacity(0.1)))
+                                Text("Reset Purchase").font(.appBody).foregroundStyle(Color.appDanger)
+                                Spacer()
+                            }
+                        }.buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("Debug").font(.appSmallSemibold).foregroundStyle(Color.appTextTertiary)
+                        .textCase(.uppercase).tracking(0.6)
+                }
+                #endif
             }
             .listStyle(.insetGrouped)
             .toolbar {
@@ -105,9 +159,6 @@ struct SettingsView: View {
             .sheet(isPresented: $showDeletePreference) {
                 DeletePreferencePickerView()
                     .environment(appState)
-            }
-            .sheet(isPresented: $showingPaywall) {
-                PaywallView().environment(appState)
             }
             .sheet(isPresented: $showingPrivacy) {
                 LegalDocumentView(type: .privacyPolicy)

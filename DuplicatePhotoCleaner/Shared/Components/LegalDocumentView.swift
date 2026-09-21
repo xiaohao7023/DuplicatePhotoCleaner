@@ -6,8 +6,8 @@ enum LegalDocumentType {
 
     var title: String {
         switch self {
-        case .privacyPolicy: "Privacy Policy"
-        case .termsOfUse: "Terms of Use"
+        case .privacyPolicy: String(localized: "Privacy Policy")
+        case .termsOfUse: String(localized: "Terms of Use")
         }
     }
 
@@ -68,13 +68,13 @@ private enum LegalContent {
     static let privacyPolicy = """
     Privacy Policy
 
-    Last updated: May 12, 2026
+    Last updated: July 20, 2026
 
-    In short: Duplicate Photo Cleaner does not collect, transmit, or share any of your personal data. All photo analysis happens entirely on your device.
+    In short: Your photos always stay on your device. We collect limited anonymous app-usage events to understand launches, onboarding, paywall views, and verified purchases.
 
     1. Information We Collect
 
-    We do not collect any personal information. Duplicate Photo Cleaner operates entirely on your device and does not send any data to external servers.
+    We do not collect your name, email address, precise location, photo content, or other user-generated content. The app sends limited anonymous usage events, app version, build number, storefront or device region, and a random installation identifier to our analytics service.
 
     The app accesses your photo library solely to perform local analysis (detecting duplicates, similar photos, blurry images, and screenshots). This access is handled through Apple's Photos framework and all processing occurs on-device.
 
@@ -98,7 +98,7 @@ private enum LegalContent {
 
     \u{2022} Cumulative cleanup statistics (storage freed, items deleted)
 
-    This data never leaves your device and is automatically removed if you uninstall the app.
+    These preferences and cleanup statistics remain on your device. A separate random installation identifier is stored in Keychain so anonymous events can be counted without an account.
 
     4. In-App Purchases
 
@@ -106,11 +106,11 @@ private enum LegalContent {
 
     5. Third-Party Services
 
-    This app does not integrate any third-party analytics, advertising, tracking, or data collection services. No SDKs are included that would collect or transmit user data.
+    The app uses our first-party analytics endpoint hosted on Cloudflare to process anonymous usage events. We do not use advertising SDKs, cross-app tracking, or sell personal data. Photos, thumbnails, filenames, and photo metadata are never included in analytics events.
 
     6. Children's Privacy
 
-    Since we do not collect any personal information, the app is safe for users of all ages. No special children's privacy provisions are necessary.
+    The app does not knowingly collect personal information from children. Its limited analytics events are anonymous and are not used for advertising or tracking.
 
     7. Changes to This Policy
 

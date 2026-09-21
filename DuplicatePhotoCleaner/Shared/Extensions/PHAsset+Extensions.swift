@@ -1,7 +1,22 @@
 import Photos
 
+// 使用简单的锁类来解决 Swift 6 并发问题
+// SimpleLock is @unchecked Sendable — safe to access from any actor context.
+// The nonisolated(unsafe) on cacheLock silences the cross-isolation access
+// warning; the compiler considers it "unnecessary" for a Sendable constant
+// but it IS required for access from nonisolated properties (known Swift issue).
+private final class SimpleLock: @unchecked Sendable {
+    private let _lock = NSLock()
+
+    func performLocked<T>(_ body: () throws -> T) rethrows -> T {
+        _lock.lock()
+        defer { _lock.unlock() }
+        return try body()
+    }
+}
+
 nonisolated(unsafe) private var fileSizeCache: [String: Int64] = [:]
-private let cacheLock = NSLock()
+nonisolated(unsafe) private let cacheLock = SimpleLock()
 
 extension PHAsset {
     nonisolated var fileSizeFormatted: String {
@@ -15,21 +30,21 @@ extension PHAsset {
 
     nonisolated var fileSizeBytes: Int64 {
         let id = localIdentifier
-        cacheLock.lock()
-        if let cached = fileSizeCache[id] {
-            cacheLock.unlock()
-            return cached
+        return cacheLock.performLocked {
+            if let cached = fileSizeCache[id] {
+                return cached
+            }
+
+            let resources = PHAssetResource.assetResources(for: self)
+            let size = resources
+                .filter { $0.type != .adjustmentData }
+                .reduce(Int64(0)) { total, resource in
+                    total + (resource.value(forKey: "fileSize") as? Int64 ?? 0)
+                }
+
+            fileSizeCache[id] = size
+            return size
         }
-        cacheLock.unlock()
-
-        let resources = PHAssetResource.assetResources(for: self)
-        let size = resources.first?.value(forKey: "fileSize") as? Int64 ?? 0
-
-        cacheLock.lock()
-        fileSizeCache[id] = size
-        cacheLock.unlock()
-
-        return size
     }
 
     nonisolated var resolutionFormatted: String {

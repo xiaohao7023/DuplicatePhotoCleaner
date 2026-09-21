@@ -10,11 +10,11 @@ struct PhotoThumbnailGrid: View {
     let columns = 3
 
     private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 4), count: columns)
+        Array(repeating: GridItem(.flexible(), spacing: 2), count: columns)
     }
 
     var body: some View {
-        LazyVGrid(columns: gridColumns, spacing: 4) {
+        LazyVGrid(columns: gridColumns, spacing: 2) {
             ForEach(assets, id: \.localIdentifier) { asset in
                 PhotoGridCell(
                     asset: asset,
@@ -36,48 +36,61 @@ struct PhotoGridCell: View {
     @State private var thumbnail: UIImage?
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(1, contentMode: .fill)
-                    .clipped()
-            } else {
-                Rectangle()
-                    .fill(Color.appBackgroundTertiary)
-                    .aspectRatio(1, contentMode: .fill)
-                    .overlay { ProgressView().scaleEffect(0.6) }
-                    .onAppear { loadThumbnail() }
+        Color.appBackgroundTertiary
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let thumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                }
             }
-            if showSelection {
-                ZStack {
-                    Circle()
-                        .fill(isSelected ? Color.appPrimary : Color.white.opacity(0.7))
-                        .frame(width: 24, height: 24)
-                        .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
-                    if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
+            .clipped()
+            .overlay(alignment: .bottomLeading) {
+                if isRecommended {
+                    HStack(spacing: 3) {
+                        Image(systemName: "star.fill").font(.system(size: 10))
+                        Text("Best").font(.appMicro)
                     }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(Capsule().fill(Color.appSuccess))
+                    .padding(5)
                 }
-                .padding(6)
             }
-            if isRecommended {
-                HStack(spacing: 3) {
-                    Image(systemName: "checkmark.seal.fill").font(.system(size: 10))
-                    Text("Best").font(.appMicro)
+            .overlay(alignment: .topTrailing) {
+                if showSelection {
+                    ZStack {
+                        Circle()
+                            .fill(isSelected ? Color.appRose : Color.white.opacity(0.85))
+                            .frame(width: 22, height: 22)
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                        } else {
+                            Circle()
+                                .strokeBorder(Color.black.opacity(0.15), lineWidth: 1)
+                                .frame(width: 20, height: 20)
+                        }
+                    }
+                    .padding(5)
+                    .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(Capsule().fill(Color.appSuccess))
-                .padding(6)
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                if isSelected {
+                    Rectangle()
+                        .fill(Color.appRose.opacity(0.15))
+                        .allowsHitTesting(false)
+                }
+            }
+            .onAppear { loadThumbnail() }
+            .onDisappear { thumbnail = nil }
     }
 
     private func loadThumbnail() {
+        guard thumbnail == nil else { return }
         let opts = PHImageRequestOptions()
         opts.deliveryMode = .opportunistic
         opts.isNetworkAccessAllowed = false

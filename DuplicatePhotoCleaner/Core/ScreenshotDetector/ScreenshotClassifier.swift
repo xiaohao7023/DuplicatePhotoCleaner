@@ -5,6 +5,15 @@ enum ScreenshotTimeGroup: String, CaseIterable {
     case thisWeek = "This Week"
     case thisMonth = "This Month"
     case older = "Older"
+
+    var displayName: String {
+        switch self {
+        case .today: return String(localized: "Today")
+        case .thisWeek: return String(localized: "This Week")
+        case .thisMonth: return String(localized: "This Month")
+        case .older: return String(localized: "Older")
+        }
+    }
 }
 
 struct ScreenshotGroupData {

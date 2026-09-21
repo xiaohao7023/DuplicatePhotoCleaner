@@ -29,11 +29,28 @@ struct DeletePreferencePickerView: View {
                 }
             }
 
+            // 免费额度预警（仅免费用户、配额 > 80% 时显示）
+            if !appState.isPurchased && appState.freeQuotaProgress > 0.8 {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                    Text(appState.freeQuotaProgress > 0.95
+                         ? "Free limit almost used up — \(formatRemaining) left"
+                         : "\(Int((1 - appState.freeQuotaProgress) * 100))% free quota remaining (\(formatRemaining))")
+                        .font(.system(size: 10.5, weight: .medium))
+                }
+                .foregroundStyle(Color.appDanger)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+            }
+
             if let onConfirm {
                 Button {
                     appState.deletePreference = selection
-                    onConfirm()
                     dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        onConfirm()
+                    }
                 } label: {
                     Text("Confirm & Delete")
                         .font(.appSmallSemibold)
@@ -63,6 +80,13 @@ struct DeletePreferencePickerView: View {
         .background(Color.appBackground)
         .presentationDetents([.fraction(0.6)])
         .onAppear { selection = appState.deletePreference }
+    }
+
+    private var formatRemaining: String {
+        let f = ByteCountFormatter()
+        f.allowedUnits = [.useGB, .useMB]
+        f.countStyle = .file
+        return f.string(fromByteCount: appState.freeDeletesRemainingBytes)
     }
 }
 

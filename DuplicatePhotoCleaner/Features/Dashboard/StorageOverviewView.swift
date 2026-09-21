@@ -22,20 +22,18 @@ struct StorageOverviewView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ProgressBar(value: usedPercent, color: progressColor)
                     HStack {
-                        Text(String(format: "%.1f GB used", usedGB)).font(.appCaption).foregroundStyle(Color.appTextSecondary)
+                        Text("\(String(format: "%.1f", usedGB)) GB used").font(.appCaption).foregroundStyle(Color.appTextSecondary)
                         Spacer()
-                        Text(String(format: "%.1f GB available", availableGB))
+                        Text("\(String(format: "%.1f", availableGB)) GB available")
                             .font(.appCaption).foregroundStyle(availableGB < 10 ? Color.appWarning : Color.appTextSecondary)
                     }
                 }
 
-                if deletedCount > 0 {
-                    Divider().foregroundStyle(Color.appDividerLight)
-                    HStack(spacing: 8) {
-                        Image(systemName: "sparkles").font(.system(size: 14)).foregroundStyle(Color.appSuccess)
-                        Text("\(deletedCount) files cleaned  •  \(formatBytes(freedBytes)) freed")
-                            .font(.appCaption).foregroundStyle(Color.appTextSecondary)
-                    }
+                Divider().foregroundStyle(Color.appDividerLight)
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").font(.system(size: 14)).foregroundStyle(Color.appSuccess)
+                    Text("\(deletedCount) files cleaned  •  \(formatBytes(freedBytes)) freed")
+                        .font(.appCaption).foregroundStyle(Color.appTextSecondary)
                 }
             }
         }

@@ -10,23 +10,23 @@ struct PhotoQuality {
 }
 
 actor QualityAnalyzer {
-    func analyze(assets: [PHAsset], progress: @escaping (Double) -> Void) async -> [PhotoQuality] {
+    func analyze(assets: [PHAsset], targetDimension: CGFloat = 512, progress: @escaping (Double) -> Void) async -> [PhotoQuality] {
         var results: [PhotoQuality] = []
         let total = Double(assets.count)
         for (index, asset) in assets.enumerated() {
-            if let quality = await analyzeSingle(asset) { results.append(quality) }
+            if let quality = await analyzeSingle(asset, targetDimension: targetDimension) { results.append(quality) }
             progress(Double(index + 1) / total)
         }
         return results.sorted { $0.blurScore < $1.blurScore }
     }
 
-    func findBlurry(assets: [PHAsset], threshold: BlurDetector.BlurLevel = .blurry, progress: @escaping (Double) -> Void) async -> [PhotoQuality] {
-        let all = await analyze(assets: assets, progress: progress)
+    func findBlurry(assets: [PHAsset], threshold: BlurDetector.BlurLevel = .blurry, targetDimension: CGFloat = 512, progress: @escaping (Double) -> Void) async -> [PhotoQuality] {
+        let all = await analyze(assets: assets, targetDimension: targetDimension, progress: progress)
         return all.filter { $0.blurScore < threshold.threshold }
     }
 
-    private func analyzeSingle(_ asset: PHAsset) async -> PhotoQuality? {
-        guard let image = await requestCGImage(for: asset) else { return nil }
+    private func analyzeSingle(_ asset: PHAsset, targetDimension: CGFloat) async -> PhotoQuality? {
+        guard let image = await requestCGImage(for: asset, targetDimension: targetDimension) else { return nil }
         let blurScore = BlurDetector.laplacianVariance(for: image) ?? 0
         let resources = PHAssetResource.assetResources(for: asset)
         let fileSize = resources.first?.value(forKey: "fileSize") as? Int64 ?? 0
@@ -39,16 +39,16 @@ actor QualityAnalyzer {
         )
     }
 
-    private func requestCGImage(for asset: PHAsset) async -> CGImage? {
+    private func requestCGImage(for asset: PHAsset, targetDimension: CGFloat) async -> CGImage? {
         await withCheckedContinuation { continuation in
             var didResume = false
             let lock = NSLock()
             let opts = PHImageRequestOptions()
-            opts.deliveryMode = .highQualityFormat
+            opts.deliveryMode = targetDimension < 512 ? .fastFormat : .highQualityFormat
             opts.isNetworkAccessAllowed = false
             opts.resizeMode = .fast
             PHImageManager.default().requestImage(
-                for: asset, targetSize: CGSize(width: 512, height: 512),
+                for: asset, targetSize: CGSize(width: targetDimension, height: targetDimension),
                 contentMode: .aspectFill, options: opts
             ) { image, _ in
                 lock.lock()

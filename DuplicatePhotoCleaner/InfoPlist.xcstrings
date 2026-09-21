@@ -1,0 +1,124 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto Cleaner: Duplikate"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dupes: Duplicate Photo Cleaner"
+          }
+        },
+        "es-MX" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpia Fotos Duplicadas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nettoyeur Photos Doublons"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写真クリーナー：重複・類似写真削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중복 사진 클리너"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulitore Foto Duplicate"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpar Fotos Duplicadas"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "DuplicatePhotoCleaner"
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryUsageDescription" : {
+      "comment" : "Privacy - Photo Library Usage Description",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese App benötigt Zugriff auf Ihre Fotos, um Duplikate, ähnliche Fotos, unscharfe Aufnahmen und Screenshots zu finden und zu bereinigen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This app needs access to your photos to find duplicates, similar photos, blurry shots, and screenshots for cleanup."
+          }
+        },
+        "es-MX" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta app necesita acceso a tus fotos para encontrar duplicados, fotos similares, imágenes borrosas y capturas de pantalla para limpiarlas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette app a besoin d'accéder à vos photos pour trouver et nettoyer les doublons, les photos similaires, les images floues et les captures d'écran."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重複写真、類似写真、ぼやけた写真、スクリーンショットを見つけて削除するために写真へのアクセスが必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중복 사진, 유사 사진, 흐린 사진, 스크린샷을 찾아 정리하려면 사진 접근 권한이 필요합니다."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questa app ha bisogno di accedere alle tue foto per trovare e pulire foto duplicate, simili, sfocate e screenshot."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este app precisa de acesso às suas fotos para encontrar e limpar duplicatas, fotos semelhantes, imagens borradas e capturas de tela."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

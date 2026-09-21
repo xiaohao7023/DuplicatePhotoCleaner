@@ -1,34 +1,34 @@
 import SwiftUI
 
 extension Color {
-    // MARK: - Primary (Crail Warm Brown-Red)
-    static let appPrimary = Color(hex: "C15F3C")
-    static let appPrimaryLight = Color(hex: "D4836A")
+    // MARK: - Primary (Dupes System Blue)
+    static let appPrimary = Color(hex: "1677FF")
+    static let appPrimaryLight = Color(hex: "4DB8FF")
     static let appPrimaryGradient = LinearGradient(
-        colors: [Color(hex: "C15F3C"), Color(hex: "A04E32")],
+        colors: [Color(hex: "42C4FF"), Color(hex: "0868F2")],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
-    static let appPrimaryBG = Color(hex: "C15F3C").opacity(0.1)
+    static let appPrimaryBG = Color(hex: "1677FF").opacity(0.1)
 
     // MARK: - Semantic
     static let appSuccess = Color(hex: "6B8F5B")
     static let appSuccessBG = Color(hex: "6B8F5B").opacity(0.08)
     static let appWarning = Color(hex: "C4903D")
     static let appWarningBG = Color(hex: "C4903D").opacity(0.08)
-    static let appDanger = Color(hex: "B84C4C")
-    static let appDangerBG = Color(hex: "B84C4C").opacity(0.08)
+    static let appDanger = Color(hex: "B93632")
+    static let appDangerBG = Color(hex: "B93632").opacity(0.08)
 
-    // MARK: - Neutral (Pampas Warm Gray)
-    static let appBackground = Color(hex: "F4F3EE")
-    static let appBackgroundSecondary = Color(hex: "EDECEA")
-    static let appBackgroundTertiary = Color(hex: "DEDBD5")
+    // MARK: - Neutral (Cool system gray)
+    static let appBackground = Color(hex: "F6F9FD")
+    static let appBackgroundSecondary = Color(hex: "EEF3F9")
+    static let appBackgroundTertiary = Color(hex: "E1E9F3")
     static let appSurface = Color.white
-    static let appTextPrimary = Color(hex: "2D2A26")
-    static let appTextSecondary = Color(hex: "8A8580")
-    static let appTextTertiary = Color(hex: "B1ADA1")
-    static let appTextQuaternary = Color(hex: "C8C4BC")
-    static let appDivider = Color(hex: "D8D5CE")
-    static let appDividerLight = Color(hex: "E8E6E1")
+    static let appTextPrimary = Color(hex: "172033")
+    static let appTextSecondary = Color(hex: "667085")
+    static let appTextTertiary = Color(hex: "98A2B3")
+    static let appTextQuaternary = Color(hex: "C3CCD8")
+    static let appDivider = Color(hex: "D7E0EB")
+    static let appDividerLight = Color(hex: "E8EEF5")
 
     // MARK: - Auxiliary
     static let appPurple = Color(hex: "8B7D9E")
@@ -38,6 +38,7 @@ extension Color {
     static let appDustyRose = Color(hex: "C17B8A")
     static let appSlateBlue = Color(hex: "7B8FA1")
     static let appCamel = Color(hex: "A67B5B")
+    static let appRose = Color(hex: "D4566B")
 
     // MARK: - Hex Initializer
     init(hex: String) {

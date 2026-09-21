@@ -8,6 +8,15 @@ struct BlurDetector: Sendable {
         case blurry = "Blurry"
         case veryBlurry = "Very Blurry"
 
+        var displayName: String {
+            switch self {
+            case .sharp: return String(localized: "Sharp")
+            case .slightlyBlurry: return String(localized: "Slightly Blurry")
+            case .blurry: return String(localized: "Blurry")
+            case .veryBlurry: return String(localized: "Very Blurry")
+            }
+        }
+
         nonisolated var threshold: Double {
             switch self {
             case .sharp: return 500

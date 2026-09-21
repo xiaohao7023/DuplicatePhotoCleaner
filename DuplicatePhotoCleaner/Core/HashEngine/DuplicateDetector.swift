@@ -36,6 +36,7 @@ actor DuplicateDetector {
                 groups.append(DuplicateGroup(assets: group, recommended: pickBest(in: group)))
             }
         }
+
         return groups
     }
 
